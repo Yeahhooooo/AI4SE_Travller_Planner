@@ -4,7 +4,7 @@
       <div class="flex items-center">
         <el-icon :size="24" class="mr-2 text-blue-500"><MapLocation /></el-icon>
         <span class="text-xl font-semibold">AI 旅行规划助手</span>
-      </div>
+      </div>ß
       <el-dropdown @command="handleCommand">
         <span class="el-dropdown-link flex items-center">
           {{ user?.email }}
@@ -24,7 +24,7 @@
         <p class="text-gray-500 mb-8">欢迎回来，开始你的下一次智能旅行吧！</p>
 
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="12">
             <el-card shadow="hover" class="h-full">
               <template #header>
                 <div class="flex items-center">
@@ -32,25 +32,12 @@
                   <span class="font-semibold">智能行程规划</span>
                 </div>
               </template>
-              <p class="text-gray-600 mb-4">通过语音或文字输入你的旅行想法，AI 将为你生成个性化的旅行计划。</p>
+              <p class="text-gray-600 mb-4">通过语音或文字输入你的旅行想法，AI 将为你生成包含预算建议的个性化旅行计划。</p>
               <el-button type="primary" class="w-full">开始规划</el-button>
             </el-card>
           </el-col>
 
-          <el-col :span="8">
-            <el-card shadow="hover" class="h-full">
-              <template #header>
-                <div class="flex items-center">
-                  <el-icon :size="20" class="mr-2"><Money /></el-icon>
-                  <span class="font-semibold">费用预算与管理</span>
-                </div>
-              </template>
-              <p class="text-gray-600 mb-4">AI 辅助你进行预算分析，并随时记录旅行途中的每一笔开销。</p>
-              <el-button type="primary" class="w-full">管理费用</el-button>
-            </el-card>
-          </el-col>
-
-          <el-col :span="8">
+          <el-col :span="12">
             <el-card shadow="hover" class="h-full">
               <template #header>
                 <div class="flex items-center">
@@ -58,7 +45,7 @@
                   <span class="font-semibold">我的旅行计划</span>
                 </div>
               </template>
-              <p class="text-gray-600 mb-4">查看和管理你所有已保存的旅行计划，随时回顾和修改。</p>
+              <p class="text-gray-600 mb-4">查看和管理你所有已保存的旅行计划，随时回顾和修改，并跟踪相关开销。</p>
               <el-button type="primary" class="w-full">查看计划</el-button>
             </el-card>
           </el-col>
