@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
+const { callLLMApi } = require('../services/llmService');
 
 // 从环境变量中获取 Supabase 配置
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -25,27 +26,16 @@ router.post('/generate', async (req, res) => {
     }
 
     try {
-        // --- 模拟调用大语言模型 (LLM) ---
-        // 在真实场景中，这里会调用 OpenAI, Google Gemini, 或其他 LLM 的 API
-        // const aiResponse = await callLLMApi(prompt);
+        // --- 调用大语言模型 (LLM) ---
+        const aiResponse = await callLLMApi(prompt);
 
-        // 为了演示，我们使用一个硬编码的、符合数据库结构的 JSON 对象作为模拟响应
-        const mockLLMResponse = {
-            trip_name: "探索东京的奇幻5日之旅 (预览)",
-            start_date: "2025-11-10",
-            end_date: "2025-11-14",
-            budget: 5000,
-            events: [
-                { type: 'transport', description: '抵达东京成田机场，前往酒店办理入住', location: '成田国际机场', start_time: '2025-11-10T14:00:00Z', end_time: '2025-11-10T16:00:00Z', expenses: [{ amount: 300, category: 'transport', description: '机场大巴', expense_date: '2025-11-10' }] },
-                { type: 'dining', description: '在新宿品尝正宗的拉面', location: '新宿区', start_time: '2025-11-10T19:00:00Z', end_time: '2025-11-10T20:30:00Z', expenses: [{ amount: 120, category: 'food', description: '一兰拉面', expense_date: '2025-11-10' }] },
-                { type: 'activity', description: '参观浅草寺和仲见世商店街', location: '浅草寺', start_time: '2025-11-11T09:00:00Z', end_time: '2025-11-11T12:00:00Z', expenses: [] },
-                { type: 'activity', description: '登上东京晴空塔，俯瞰城市全景', location: '东京晴空塔', start_time: '2025-11-11T14:00:00Z', end_time: '2025-11-11T16:00:00Z', expenses: [{ amount: 180, category: 'entertainment', description: '晴空塔门票', expense_date: '2025-11-11' }] },
-            ]
-        };
-        // --- 模拟结束 ---
+        // 对 LLM 的返回结果进行基本校验
+        if (!aiResponse || !aiResponse.trip_name || !Array.isArray(aiResponse.events)) {
+            throw new Error('Invalid response format from LLM.');
+        }
 
-        // 直接返回模拟的 AI 响应
-        res.status(200).json(mockLLMResponse);
+        // 直接返回 AI 响应
+        res.status(200).json(aiResponse);
 
     } catch (error) {
         console.error('Error generating trip preview:', error);
