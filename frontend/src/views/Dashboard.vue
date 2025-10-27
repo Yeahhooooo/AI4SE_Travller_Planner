@@ -4,7 +4,7 @@
       <div class="flex items-center">
         <el-icon :size="24" class="mr-2 text-blue-500"><MapLocation /></el-icon>
         <span class="text-xl font-semibold">AI 旅行规划助手</span>
-      </div>ß
+      </div>
       <el-dropdown @command="handleCommand">
         <span class="el-dropdown-link flex items-center">
           {{ user?.email }}
@@ -33,7 +33,7 @@
                 </div>
               </template>
               <p class="text-gray-600 mb-4">通过语音或文字输入你的旅行想法，AI 将为你生成包含预算建议的个性化旅行计划。</p>
-              <el-button type="primary" class="w-full">开始规划</el-button>
+              <el-button type="primary" class="w-full" @click="goToPlan">开始规划</el-button>
             </el-card>
           </el-col>
 
@@ -59,7 +59,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
-import { ArrowDown, MapLocation, Money, Collection } from '@element-plus/icons-vue';
+import { ArrowDown, MapLocation, Collection } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const user = ref(null);
@@ -68,6 +68,10 @@ onMounted(async () => {
   const { data } = await supabase.auth.getUser();
   user.value = data.user;
 });
+
+const goToPlan = () => {
+  router.push({ name: 'Plan' });
+};
 
 const handleLogout = async () => {
   await supabase.auth.signOut();

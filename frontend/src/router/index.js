@@ -4,6 +4,8 @@ import { supabase } from '../supabase';
 import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
 import Dashboard from '../views/Dashboard.vue';
+import Plan from '../views/Plan.vue';
+import TripDetails from '../views/TripDetails.vue';
 
 const routes = [
   {
@@ -20,6 +22,18 @@ const routes = [
     path: '/dashboard',
     name: 'Dashboard',
     component: Dashboard,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/plan',
+    name: 'Plan',
+    component: Plan,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/trip/:id',
+    name: 'TripDetails',
+    component: TripDetails,
     meta: { requiresAuth: true },
   },
   {

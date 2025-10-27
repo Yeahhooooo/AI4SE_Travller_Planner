@@ -23,7 +23,10 @@ app.use(express.json());
 
 // 路由
 const authRoutes = require('./routes/auth');
+const tripRoutes = require('./routes/trips');
+
 app.use('/api/auth', authRoutes);
+app.use('/api/trips', tripRoutes);
 
 
 app.get('/', (req, res) => {
