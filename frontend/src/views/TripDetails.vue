@@ -20,15 +20,17 @@
     </el-header>
 
     <el-container>
-      <el-aside width="350px" class="bg-white p-6 border-r">
-        <h2 class="text-2xl font-bold mb-4">地图规划 (预留)</h2>
-        <div class="bg-gray-200 h-96 rounded-lg flex items-center justify-center">
-          <p class="text-gray-500">百度地图 API 位置</p>
+      <el-aside width="500px" class="bg-white p-6 border-r flex flex-col">
+        <h2 class="text-2xl font-bold mb-4 flex-shrink-0">路线地图</h2>
+        <div id="map-container" class="w-full rounded-lg flex-grow bg-gray-200">
+          <div v-if="mapLoadingText" class="flex items-center justify-center h-full">
+            <p class="text-gray-500">{{ mapLoadingText }}</p>
+          </div>
         </div>
       </el-aside>
 
       <el-main class="bg-gray-50 p-8" v-loading="isLoading" element-loading-text="正在加载行程详情...">
-        <div v-if="!isLoading && trip" class="max-w-7xl mx-auto">
+        <div v-if="!isLoading && trip" class="max-w-5xl mx-auto">
           <!-- 行程头部信息 -->
           <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-800">{{ trip.name }}</h1>
@@ -81,7 +83,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
@@ -96,6 +98,8 @@ const user = ref(null);
 const trip = ref(null);
 const isLoading = ref(true);
 const isSaving = ref(false);
+const mapLoadingText = ref('正在加载地图...');
+let map = null; // 地图实例
 
 const tripId = computed(() => route.params.id);
 const isPreview = computed(() => tripId.value === 'preview');
@@ -145,6 +149,10 @@ const loadPreviewData = () => {
         events: parsedData.events
     };
     isLoading.value = false;
+    // 使用 nextTick 确保 DOM 已经更新
+    nextTick(() => {
+      initMap(); // 直接初始化地图
+    });
   } else {
     ElMessage.error('找不到预览数据，请返回重新生成。');
     router.push({ name: 'Plan' });
@@ -155,12 +163,16 @@ const loadPreviewData = () => {
 const fetchTripDetails = async () => {
   isLoading.value = true;
   try {
-    const response = await fetch(`http://localhost:3000/api/trips/${tripId.value}`);
+    const response = await fetch(`http://localhost:3001/api/trips/${tripId.value}`);
     if (!response.ok) {
         throw new Error('行程加载失败');
     }
     const data = await response.json();
     trip.value = data;
+    // 使用 nextTick 确保 DOM 已经更新
+    nextTick(() => {
+      initMap(); // 直接初始化地图
+    });
   } catch (error) {
     console.error('Failed to fetch trip details:', error);
     ElMessage.error(error.message);
@@ -168,6 +180,65 @@ const fetchTripDetails = async () => {
   } finally {
     isLoading.value = false;
   }
+};
+
+const initMap = () => {
+  const events = trip.value?.events || trip.value?.trip_events;
+  if (!events || events.length < 2) {
+    mapLoadingText.value = '地点不足，无法规划路线';
+    return;
+  }
+
+  const locationsWithCoords = events
+    .map(event => ({ lat: event.latitude, lng: event.longitude, description: event.description }))
+    .filter(loc => loc.lat && loc.lng);
+
+  if (locationsWithCoords.length < 2) {
+    mapLoadingText.value = '有效的地理位置不足，无法规划路线';
+    return;
+  }
+
+  mapLoadingText.value = null; // Ready to draw, hide loading text
+
+  if (!window.BMapGL) {
+    mapLoadingText.value = '百度地图脚本加载失败';
+    console.error('BMapGL not found on window object.');
+    return;
+  }
+
+  map = new BMapGL.Map('map-container');
+  const startPoint = new BMapGL.Point(locationsWithCoords[0].lng, locationsWithCoords[0].lat);
+  map.centerAndZoom(startPoint, 12);
+  map.enableScrollWheelZoom(true);
+
+  const endPoint = new BMapGL.Point(locationsWithCoords[locationsWithCoords.length - 1].lng, locationsWithCoords[locationsWithCoords.length - 1].lat);
+  
+  let waypoints = locationsWithCoords
+    .slice(1, -1)
+    .map(loc => new BMapGL.Point(loc.lng, loc.lat));
+
+  // 百度地图API限制：最多支持10个途经点
+  if (waypoints.length > 10) {
+    ElMessage.warning('途经点超过10个，地图上仅显示部分路线。');
+    waypoints = waypoints.slice(0, 10);
+  }
+
+  const driving = new BMapGL.DrivingRoute(map, {
+    renderOptions: { 
+      map: map, 
+      autoViewport: true 
+    },
+    onSearchComplete: function(results) {
+      // BMAP_STATUS_SUCCESS 的值为 0
+      if (driving.getStatus() !== 0) {
+        console.error("路线规划失败: ", driving.getStatus());
+        mapLoadingText.value = `路线规划失败 (代码: ${driving.getStatus()})`;
+      }
+    }
+  });
+
+
+  // driving.search(startPoint, endPoint, { waypoints: waypoints });
 };
 
 const saveTrip = async () => {
@@ -188,7 +259,7 @@ const saveTrip = async () => {
         events: trip.value.events
     };
 
-    const response = await fetch('http://localhost:3000/api/trips', {
+    const response = await fetch('http://localhost:3001/api/trips', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,6 +309,7 @@ const formatDate = (dateStr, withWeekday = false) => {
   }
   return new Date(dateStr).toLocaleDateString('zh-CN', options);
 };
+
 const formatTimestamp = (ts) => new Date(ts).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 const getEventType = (type) => {

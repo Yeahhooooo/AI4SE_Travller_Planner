@@ -15,44 +15,47 @@ const MODEL = "ernie-4.5-turbo-vl-32k";
 const buildPrompt = (userInput) => {
     // 这是整个 Prompt 工程的核心部分。
     // 我们通过详细的指令和 JSON 结构示例，引导模型输出我们需要的格式。
-    return `
-        You are an expert travel planner AI. Your task is to generate a detailed travel itinerary based on the user's request.
-        The output MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object.
-        All descriptive text fields (trip_name, description) MUST be in Chinese.
+    return `You are an expert travel planner AI. Your task is to generate a detailed travel itinerary based on the user's request.
+The output MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object.
+All descriptive text fields (trip_name, description) MUST be in Chinese.
 
-        User's request: "${userInput}"
+User's request: "${userInput}"
 
-        The JSON object must follow this exact structure:
+The JSON object must follow this exact structure:
+{
+  "trip_name": "一个描述性强且吸引人的中文行程名称",
+  "start_date": "YYYY-MM-DD format",
+  "end_date": "YYYY-MM-DD format",
+  "budget": "一个代表预估总预算的数字",
+  "events": [
+    {
+      "type": "One of 'transport', 'dining', 'activity', 'accommodation'",
+      "description": "一个详细的中文事件描述",
+      "location": "一个用于地图编码的、尽可能详细的地址(例如, '日本东京都新宿区新宿御苑')",
+      "latitude": "此地点的精确纬度 (数字)",
+      "longitude": "此地点的精确经度 (数字)",
+      "start_time": "ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)",
+      "end_time": "ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)",
+      "expenses": [
         {
-          "trip_name": "一个描述性强且吸引人的中文行程名称",
-          "start_date": "YYYY-MM-DD format",
-          "end_date": "YYYY-MM-DD format",
-          "budget": "一个代表预估总预算的数字",
-          "events": [
-            {
-              "type": "One of 'transport', 'dining', 'activity', 'accommodation'",
-              "description": "一个详细的中文事件描述",
-              "location": "事件的具体地点 (例如, '新宿御苑')",
-              "start_time": "ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)",
-              "end_time": "ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)",
-              "expenses": [
-                {
-                  "amount": "一个代表此项具体花费预估成本的数字",
-                  "category": "One of 'transport', 'food', 'tickets', 'shopping', 'other'",
-                  "description": "一个简短的中文费用描述 (例如, '地铁票')",
-                  "expense_date": "YYYY-MM-DD format"
-                }
-              ]
-            }
-          ]
+          "amount": "一个代表此项具体花费预估成本的数字",
+          "category": "One of 'transport', 'food', 'tickets', 'shopping', 'other'",
+          "description": "一个简短的中文费用描述 (例如, '地铁票')",
+          "expense_date": "YYYY-MM-DD format"
         }
+      ]
+    }
+  ]
+}
 
-        Important Rules:
-        1.  All fields in the JSON structure are mandatory. All text values like trip_name and description must be in Chinese.
-        2.  If an event has no specific expense, provide an empty array for the "expenses" field: [].
-        3.  Ensure all dates and times are in the correct specified format.
-        4.  The response must be only the JSON object.
-    `;
+Important Rules:
+1. All fields in the JSON structure are mandatory. All text values like trip_name and description must be in Chinese.
+2. If an event has no specific expense, provide an empty array for the "expenses" field: [].
+3. Ensure all dates and times are in the correct specified format.
+4. The response must be only the JSON object.
+5. The "location" field should be as specific as possible to ensure accurate map geocoding, including country, city, district, and具体地点.
+6. Every event MUST include both accurate latitude and longitude fields for precise location mapping.
+`;
 };
 
 /**
@@ -98,131 +101,112 @@ const callLLMApi = async (userInput) => {
 
         // 测试时为了方便，直接返回一个模拟的 JSON 对象
         const content = `{
-  "trip_name": "东京动漫美食五日探索之旅",
-  "start_date": "2024-11-01",
-  "end_date": "2024-11-05",
+  "trip_name": "北京历史文化两日深度游",
+  "start_date": "2023-11-01",
+  "end_date": "2023-11-02",
   "budget": "5000",
   "events": [
     {
-      "type": "transport",
-      "description": "抵达东京成田国际机场，乘坐机场快线前往市区酒店办理入住",
-      "location": "成田国际机场至市区酒店",
-      "start_time": "2024-11-01T10:00:00+09:00",
-      "end_time": "2024-11-01T12:00:00+09:00",
-      "expenses": [
-        {
-          "amount": "3000",
-          "category": "transport",
-          "description": "机场快线车票（往返预估）",
-          "expense_date": "2024-11-01"
-        }
-      ]
-    },
-    {
       "type": "accommodation",
-      "description": "入住东京市区经济型酒店",
-      "location": "东京市区酒店",
-      "start_time": "2024-11-01T14:00:00+09:00",
-      "end_time": "2024-11-05T12:00:00+09:00",
+      "description": "入住北京市中心酒店，方便游览主要景点",
+      "location": "中国北京市东城区王府井大街88号王府井大酒店",
+      "latitude": 39.9134,
+      "longitude": 116.4152,
+      "start_time": "2023-11-01T14:00:00+08:00",
+      "end_time": "2023-11-02T12:00:00+08:00",
       "expenses": [
         {
-          "amount": "2000",
+          "amount": "800",
           "category": "other",
-          "description": "四晚住宿费用",
-          "expense_date": "2024-11-01"
+          "description": "酒店住宿费用",
+          "expense_date": "2023-11-01"
         }
       ]
     },
     {
       "type": "activity",
-      "description": "前往秋叶原，探索动漫文化，参观动漫商店、女仆咖啡厅等",
-      "location": "秋叶原",
-      "start_time": "2024-11-02T09:00:00+09:00",
-      "end_time": "2024-11-02T18:00:00+09:00",
+      "description": "参观故宫博物院，感受明清皇家历史",
+      "location": "中国北京市东城区景山前街4号故宫博物院",
+      "latitude": 39.9163,
+      "longitude": 116.3971,
+      "start_time": "2023-11-01T15:30:00+08:00",
+      "end_time": "2023-11-01T18:00:00+08:00",
       "expenses": [
         {
-          "amount": "500",
-          "category": "shopping",
-          "description": "动漫周边购物",
-          "expense_date": "2024-11-02"
+          "amount": "60",
+          "category": "tickets",
+          "description": "故宫门票",
+          "expense_date": "2023-11-01"
         }
       ]
     },
     {
       "type": "dining",
-      "description": "在秋叶原品尝特色动漫主题餐厅美食",
-      "location": "秋叶原动漫主题餐厅",
-      "start_time": "2024-11-02T12:00:00+09:00",
-      "end_time": "2024-11-02T13:30:00+09:00",
+      "description": "在王府井老字号餐厅品尝北京烤鸭",
+      "location": "中国北京市东城区王府井大街全聚德烤鸭店",
+      "latitude": 39.9122,
+      "longitude": 116.4167,
+      "start_time": "2023-11-01T18:30:00+08:00",
+      "end_time": "2023-11-01T20:00:00+08:00",
       "expenses": [
         {
-          "amount": "300",
+          "amount": "200",
           "category": "food",
-          "description": "动漫主题餐厅午餐",
-          "expense_date": "2024-11-02"
+          "description": "北京烤鸭晚餐",
+          "expense_date": "2023-11-01"
         }
       ]
     },
     {
       "type": "activity",
-      "description": "前往浅草寺，参观寺庙建筑，感受传统日本文化",
-      "location": "浅草寺",
-      "start_time": "2024-11-03T10:00:00+09:00",
-      "end_time": "2024-11-03T14:00:00+09:00",
-      "expenses": []
-    },
-    {
-      "type": "dining",
-      "description": "在浅草寺附近品尝传统日式美食，如天妇罗、寿司等",
-      "location": "浅草寺周边餐厅",
-      "start_time": "2024-11-03T12:00:00+09:00",
-      "end_time": "2024-11-03T13:30:00+09:00",
+      "description": "参观中国国家博物馆，了解中国历史文化",
+      "location": "中国北京市东城区东长安街16号中国国家博物馆",
+      "latitude": 39.9042,
+      "longitude": 116.3914,
+      "start_time": "2023-11-02T09:00:00+08:00",
+      "end_time": "2023-11-02T12:00:00+08:00",
       "expenses": [
         {
-          "amount": "400",
-          "category": "food",
-          "description": "传统日式午餐",
-          "expense_date": "2024-11-03"
-        }
-      ]
-    },
-    {
-      "type": "activity",
-      "description": "在东京市区自由探索，可选择前往其他动漫相关景点或购物中心",
-      "location": "东京市区",
-      "start_time": "2024-11-04T09:00:00+09:00",
-      "end_time": "2024-11-04T18:00:00+09:00",
-      "expenses": [
-        {
-          "amount": "500",
-          "category": "shopping",
-          "description": "购物及其他消费",
-          "expense_date": "2024-11-04"
+          "amount": "0",
+          "category": "tickets",
+          "description": "国博免费参观",
+          "expense_date": "2023-11-02"
         }
       ]
     },
     {
       "type": "dining",
-      "description": "品尝东京特色美食，如拉面、烤鳗鱼等",
-      "location": "东京市区餐厅",
-      "start_time": "2024-11-04T12:00:00+09:00",
-      "end_time": "2024-11-04T13:30:00+09:00",
+      "description": "在前门大街品尝老北京小吃",
+      "location": "中国北京市东城区前门大街",
+      "latitude": 39.8997,
+      "longitude": 116.4053,
+      "start_time": "2023-11-02T12:30:00+08:00",
+      "end_time": "2023-11-02T14:00:00+08:00",
       "expenses": [
         {
-          "amount": "300",
+          "amount": "100",
           "category": "food",
-          "description": "特色午餐",
-          "expense_date": "2024-11-04"
+          "description": "老北京小吃午餐",
+          "expense_date": "2023-11-02"
         }
       ]
     },
     {
       "type": "transport",
-      "description": "从酒店前往成田国际机场，准备返程",
-      "location": "市区酒店至成田国际机场",
-      "start_time": "2024-11-05T09:00:00+09:00",
-      "end_time": "2024-11-05T11:00:00+09:00",
-      "expenses": []
+      "description": "从酒店前往北京首都国际机场",
+      "location": "中国北京市首都国际机场",
+      "latitude": 40.0799,
+      "longitude": 116.5974,
+      "start_time": "2023-11-02T15:00:00+08:00",
+      "end_time": "2023-11-02T16:00:00+08:00",
+      "expenses": [
+        {
+          "amount": "100",
+          "category": "transport",
+          "description": "机场快轨车费",
+          "expense_date": "2023-11-02"
+        }
+      ]
     }
   ]
 }`;

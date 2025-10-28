@@ -54,6 +54,13 @@ COMMENT ON TABLE public.trip_events IS '存储行程中的每一个具体活动�
 COMMENT ON COLUMN public.trip_events.type IS '事件类型（活动、住宿、交通、餐饮）。';
 COMMENT ON COLUMN public.trip_events.location IS '事件发生的地理位置名称或地址。';
 
+-- 为 trip_events 表添加经纬度字段
+ALTER TABLE public.trip_events ADD COLUMN latitude DOUBLE PRECISION;
+ALTER TABLE public.trip_events ADD COLUMN longitude DOUBLE PRECISION;
+
+COMMENT ON COLUMN public.trip_events.latitude IS '事件地点的纬度，用于地图精确定位。';
+COMMENT ON COLUMN public.trip_events.longitude IS '事件地点的经度，用于地图精确定位。';
+
 -- 4. expenses: 存储旅行过程中的开销记录
 -- 创建一个开销类别的 ENUM
 CREATE TYPE public.expense_category AS ENUM ('transport', 'food', 'lodging', 'shopping', 'entertainment', 'other');
