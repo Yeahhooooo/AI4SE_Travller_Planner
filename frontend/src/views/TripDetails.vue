@@ -67,18 +67,75 @@
                       预期消费: ¥{{ calculateTotalExpense(event.expenses) }}
                     </el-tag>
                   </div>
-                  <div class="mt-2">
-                    <el-button size="small" type="primary" plain>记录实际开销</el-button>
+                  <div class="mt-2 flex justify-end space-x-2">
+                    <el-button size="small" :icon="Edit" circle @click="openEditDialog(event)" />
+                    <el-button size="small" :icon="Delete" type="danger" circle @click="handleDeleteEvent(event.id)" />
                   </div>
                 </el-card>
               </el-timeline-item>
             </el-timeline>
+            <div class="mt-4 pl-10">
+                <el-button type="primary" plain :icon="Plus" @click="openAddDialog(date)">
+                    在 {{ formatDate(date) }} 添加新事件
+                </el-button>
+            </div>
           </div>
 
         </div>
         <el-empty v-if="!isLoading && !trip" description="行程不存在或加载失败"></el-empty>
       </el-main>
     </el-container>
+
+    <!-- 事件编辑/添加对话框 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="500px"
+      @close="resetForm"
+    >
+      <el-form :model="currentEvent" ref="eventForm" label-width="80px">
+        <el-form-item label="活动描述" prop="description" :rules="{ required: true, message: '请输入活动描述', trigger: 'blur' }">
+          <el-input v-model="currentEvent.description"></el-input>
+        </el-form-item>
+        <el-form-item label="地点" prop="location" :rules="{ required: true, message: '请输入地点', trigger: 'blur' }">
+          <el-input v-model="currentEvent.location"></el-input>
+        </el-form-item>
+        <el-form-item label="开始时间" prop="start_time" :rules="{ required: true, message: '请选择开始时间', trigger: 'change' }">
+          <el-date-picker
+            v-model="currentEvent.start_time"
+            type="datetime"
+            placeholder="选择日期和时间"
+            format="YYYY-MM-DD HH:mm"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+          ></el-date-picker>
+        </el-form-item>
+        <el-form-item label="事件类型" prop="type">
+          <el-select v-model="currentEvent.type" placeholder="请选择类型">
+            <el-option label="活动" value="activity"></el-option>
+            <el-option label="住宿" value="accommodation"></el-option>
+            <el-option label="交通" value="transport"></el-option>
+            <el-option label="餐饮" value="dining"></el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-divider content-position="left">预期消费</el-divider>
+        
+        <div v-for="(expense, index) in currentEvent.expenses" :key="index" class="flex items-center space-x-2 mb-2">
+          <el-input v-model="expense.category" placeholder="费用类别 (如门票)" class="flex-1"></el-input>
+          <el-input-number v-model="expense.amount" :min="0" placeholder="金额" class="w-32"></el-input-number>
+          <el-button :icon="Delete" type="danger" circle plain @click="removeExpense(index)"></el-button>
+        </div>
+        
+        <el-button :icon="Plus" @click="addExpense" class="w-full">添加消费项</el-button>
+
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleSaveEvent">保存</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
@@ -88,8 +145,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back 
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus
 } from '@element-plus/icons-vue';
+import 'element-plus/es/components/message/style/css'
 
 const route = useRoute();
 const router = useRouter();
@@ -100,6 +158,15 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const mapLoadingText = ref('正在加载地图...');
 let map = null; // 地图实例
+
+// --- 对话框和表单相关 ---
+const dialogVisible = ref(false);
+const dialogTitle = ref('');
+const currentEvent = ref({});
+const eventForm = ref(null);
+const isEditing = ref(false);
+const originalLocation = ref(''); // 用于跟踪编辑前的地址
+const currentEditingEventId = ref(null); // 显式跟踪正在编辑的事件ID
 
 const tripId = computed(() => route.params.id);
 const isPreview = computed(() => tripId.value === 'preview');
@@ -241,6 +308,155 @@ const initMap = () => {
   // driving.search(startPoint, endPoint, { waypoints: waypoints });
 };
 
+// --- 事件操作 ---
+
+const openAddDialog = (date) => {
+  isEditing.value = false;
+  dialogTitle.value = '添加新事件';
+  currentEvent.value = {
+    id: Date.now(), // 临时ID
+    description: '',
+    location: '',
+    start_time: `${date}T12:00:00`, // 默认中午12点
+    type: 'activity',
+    expenses: []
+  };
+  dialogVisible.value = true;
+};
+
+const openEditDialog = (event) => {
+  console.log('Editing event:', event);
+  isEditing.value = true;
+  dialogTitle.value = '编辑事件';
+  currentEditingEventId.value = event.id; // 保存正在编辑的事件ID
+  // 深拷贝事件对象，确保 expenses 也是新的数组
+  currentEvent.value = JSON.parse(JSON.stringify(event));
+  originalLocation.value = event.location; // 保存原始地址
+  // 确保 expenses 数组存在
+  if (!currentEvent.value.expenses) {
+    currentEvent.value.expenses = [];
+  }
+  dialogVisible.value = true;
+};
+
+const addExpense = () => {
+  if (!currentEvent.value.expenses) {
+    currentEvent.value.expenses = [];
+  }
+  currentEvent.value.expenses.push({ category: '', amount: 0 });
+};
+
+const removeExpense = (index) => {
+  currentEvent.value.expenses.splice(index, 1);
+};
+
+const resetForm = () => {
+  currentEvent.value = {};
+  if (eventForm.value) {
+    eventForm.value.resetFields();
+  }
+};
+
+const handleSaveEvent = async () => {
+  const isValid = await eventForm.value.validate();
+  if (!isValid) {
+    ElMessage.error('请填写所有必填项');
+    return;
+  }
+
+  try {
+    let lat = currentEvent.value.latitude;
+    let lng = currentEvent.value.longitude;
+
+    const locationChanged = currentEvent.value.location !== originalLocation.value;
+
+    if (!isEditing.value || locationChanged) {
+      const response = await fetch('http://localhost:3001/api/map/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: currentEvent.value.location }),
+      });
+
+      if (!response.ok) {
+        // Explicitly show error and stop if geocoding fails.
+        console.error('Geocoding failed:', response.statusText);
+        ElMessage.error('无法解析该地址，请输入更详细的地址信息。');
+        return; 
+      }
+      
+      const coords = await response.json();
+      lat = coords.lat;
+      lng = coords.lng;
+    }
+
+    const eventToSave = {
+      ...currentEvent.value,
+      latitude: lat,
+      longitude: lng,
+    };
+
+    const events = trip.value.events || trip.value.trip_events;
+
+    if (isEditing.value) {
+      // 使用保存的ID来查找事件
+      const index = events.findIndex(e => e.id === currentEditingEventId.value);
+      if (index !== -1) {
+        // 更新事件时保留原始ID
+        events[index] = { ...eventToSave, id: currentEditingEventId.value };
+      }
+    } else {
+      events.push(eventToSave);
+    }
+
+    dialogVisible.value = false;
+    ElMessage.success(`事件已${isEditing.value ? '更新' : '添加'}`);
+    sortAndRefresh();
+
+  } catch (error) {
+    console.error('Error saving event:', error);
+    ElMessage.error(error.message || '保存事件时发生网络错误。');
+  }
+};
+
+const handleDeleteEvent = (eventId) => {
+    ElMessageBox.confirm(
+        '确定要删除这个事件吗？此操作无法撤销。',
+        '警告',
+        {
+            confirmButtonText: '确定删除',
+            cancelButtonText: '取消',
+            type: 'warning',
+        }
+    ).then(() => {
+        const events = trip.value.events || trip.value.trip_events;
+        const eventIndex = events.findIndex(e => e.id === eventId);
+        
+        if (eventIndex > -1) {
+            events.splice(eventIndex, 1);
+            ElMessage.success('事件已删除');
+            
+            // 重新排序并更新地图
+            sortAndRefresh();
+        }
+    }).catch(() => {
+        // 用户取消删除
+    });
+};
+
+const sortAndRefresh = () => {
+    const events = trip.value.events || trip.value.trip_events;
+    // 按开始时间重新排序所有事件
+    events.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    
+    // 强制 Vue 更新视图
+    trip.value.events = [...events];
+
+    // 延迟更新地图以确保 DOM 更新
+    nextTick(() => {
+        initMap();
+    });
+};
+
 const saveTrip = async () => {
   isSaving.value = true;
   try {
@@ -295,6 +511,8 @@ const saveTrip = async () => {
   } finally {
     isSaving.value = false;
   }
+
+  console.log('Save trip function executed, current trip plan :', trip.value);
 };
 
 const goHome = () => router.push({ name: 'Dashboard' });

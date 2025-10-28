@@ -54,73 +54,78 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Trip data and userId are required.' });
     }
 
-    try {
-        // 1. 将行程主体信息插入 'trips' 表
-        const { data: newTrip, error: tripError } = await supabase
-            .from('trips')
-            .insert({
-                user_id: userId,
-                name: tripData.trip_name,
-                start_date: tripData.start_date,
-                end_date: tripData.end_date,
-                budget: tripData.budget,
-            })
-            .select()
-            .single();
+    console.log('Received trip data for saving:', tripData);
 
-        if (tripError) throw tripError;
+    // TODO : 目前持久化暂不实际执行，测试
+    res.status(201).json({ message: 'Trip saved successfully! (simulated)', tripId: 12345 });
 
-        const tripId = newTrip.id;
+    // try {
+    //     // 1. 将行程主体信息插入 'trips' 表
+    //     const { data: newTrip, error: tripError } = await supabase
+    //         .from('trips')
+    //         .insert({
+    //             user_id: userId,
+    //             name: tripData.trip_name,
+    //             start_date: tripData.start_date,
+    //             end_date: tripData.end_date,
+    //             budget: tripData.budget,
+    //         })
+    //         .select()
+    //         .single();
 
-        // 2. 准备并插入 'trip_events' 数据
-        const eventsToInsert = tripData.events.map(event => ({
-            trip_id: tripId,
-            type: event.type,
-            description: event.description,
-            location: event.location,
-            start_time: event.start_time,
-            end_time: event.end_time,
-        }));
+    //     if (tripError) throw tripError;
 
-        const { data: createdEvents, error: eventsError } = await supabase
-            .from('trip_events')
-            .insert(eventsToInsert)
-            .select();
+    //     const tripId = newTrip.id;
 
-        if (eventsError) throw eventsError;
+    //     // 2. 准备并插入 'trip_events' 数据
+    //     const eventsToInsert = tripData.events.map(event => ({
+    //         trip_id: tripId,
+    //         type: event.type,
+    //         description: event.description,
+    //         location: event.location,
+    //         start_time: event.start_time,
+    //         end_time: event.end_time,
+    //     }));
 
-        // 3. 准备并插入 'expenses' 数据
-        const expensesToInsert = [];
-        tripData.events.forEach((event, index) => {
-            if (event.expenses && event.expenses.length > 0) {
-                const correspondingEventId = createdEvents[index].id;
-                event.expenses.forEach(expense => {
-                    expensesToInsert.push({
-                        event_id: correspondingEventId,
-                        amount: expense.amount,
-                        category: expense.category,
-                        description: expense.description,
-                        expense_date: expense.expense_date,
-                    });
-                });
-            }
-        });
+    //     const { data: createdEvents, error: eventsError } = await supabase
+    //         .from('trip_events')
+    //         .insert(eventsToInsert)
+    //         .select();
 
-        if (expensesToInsert.length > 0) {
-            const { error: expensesError } = await supabase
-                .from('expenses')
-                .insert(expensesToInsert);
+    //     if (eventsError) throw eventsError;
 
-            if (expensesError) throw expensesError;
-        }
+    //     // 3. 准备并插入 'expenses' 数据
+    //     const expensesToInsert = [];
+    //     tripData.events.forEach((event, index) => {
+    //         if (event.expenses && event.expenses.length > 0) {
+    //             const correspondingEventId = createdEvents[index].id;
+    //             event.expenses.forEach(expense => {
+    //                 expensesToInsert.push({
+    //                     event_id: correspondingEventId,
+    //                     amount: expense.amount,
+    //                     category: expense.category,
+    //                     description: expense.description,
+    //                     expense_date: expense.expense_date,
+    //                 });
+    //             });
+    //         }
+    //     });
 
-        // 4. 返回成功响应和新创建的行程 ID
-        res.status(201).json({ message: 'Trip saved successfully!', tripId: tripId });
+    //     if (expensesToInsert.length > 0) {
+    //         const { error: expensesError } = await supabase
+    //             .from('expenses')
+    //             .insert(expensesToInsert);
 
-    } catch (error) {
-        console.error('Error saving trip:', error);
-        res.status(500).json({ error: 'Failed to save trip.', details: error.message });
-    }
+    //         if (expensesError) throw expensesError;
+    //     }
+
+    //     // 4. 返回成功响应和新创建的行程 ID
+    //     res.status(201).json({ message: 'Trip saved successfully!', tripId: tripId });
+
+    // } catch (error) {
+    //     console.error('Error saving trip:', error);
+    //     res.status(500).json({ error: 'Failed to save trip.', details: error.message });
+    // }
 });
 
 /**

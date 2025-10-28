@@ -107,6 +107,7 @@ const callLLMApi = async (userInput) => {
   "budget": "5000",
   "events": [
     {
+      "id": 1,
       "type": "accommodation",
       "description": "入住北京市中心酒店，方便游览主要景点",
       "location": "中国北京市东城区王府井大街88号王府井大酒店",
@@ -116,6 +117,7 @@ const callLLMApi = async (userInput) => {
       "end_time": "2023-11-02T12:00:00+08:00",
       "expenses": [
         {
+          "id": 1,
           "amount": "800",
           "category": "other",
           "description": "酒店住宿费用",
@@ -124,6 +126,7 @@ const callLLMApi = async (userInput) => {
       ]
     },
     {
+      "id": 2,
       "type": "activity",
       "description": "参观故宫博物院，感受明清皇家历史",
       "location": "中国北京市东城区景山前街4号故宫博物院",
@@ -133,6 +136,7 @@ const callLLMApi = async (userInput) => {
       "end_time": "2023-11-01T18:00:00+08:00",
       "expenses": [
         {
+          "id": 2,
           "amount": "60",
           "category": "tickets",
           "description": "故宫门票",
@@ -141,6 +145,7 @@ const callLLMApi = async (userInput) => {
       ]
     },
     {
+      "id": 3,
       "type": "dining",
       "description": "在王府井老字号餐厅品尝北京烤鸭",
       "location": "中国北京市东城区王府井大街全聚德烤鸭店",
@@ -149,7 +154,8 @@ const callLLMApi = async (userInput) => {
       "start_time": "2023-11-01T18:30:00+08:00",
       "end_time": "2023-11-01T20:00:00+08:00",
       "expenses": [
-        {
+        { 
+          "id": 3,
           "amount": "200",
           "category": "food",
           "description": "北京烤鸭晚餐",
@@ -158,6 +164,7 @@ const callLLMApi = async (userInput) => {
       ]
     },
     {
+      "id": 4,
       "type": "activity",
       "description": "参观中国国家博物馆，了解中国历史文化",
       "location": "中国北京市东城区东长安街16号中国国家博物馆",
@@ -167,6 +174,7 @@ const callLLMApi = async (userInput) => {
       "end_time": "2023-11-02T12:00:00+08:00",
       "expenses": [
         {
+          "id": 4,
           "amount": "0",
           "category": "tickets",
           "description": "国博免费参观",
@@ -175,6 +183,7 @@ const callLLMApi = async (userInput) => {
       ]
     },
     {
+      "id": 5,
       "type": "dining",
       "description": "在前门大街品尝老北京小吃",
       "location": "中国北京市东城区前门大街",
@@ -184,6 +193,7 @@ const callLLMApi = async (userInput) => {
       "end_time": "2023-11-02T14:00:00+08:00",
       "expenses": [
         {
+          "id": 5,
           "amount": "100",
           "category": "food",
           "description": "老北京小吃午餐",
@@ -192,6 +202,7 @@ const callLLMApi = async (userInput) => {
       ]
     },
     {
+      "id": 6,
       "type": "transport",
       "description": "从酒店前往北京首都国际机场",
       "location": "中国北京市首都国际机场",
@@ -201,6 +212,7 @@ const callLLMApi = async (userInput) => {
       "end_time": "2023-11-02T16:00:00+08:00",
       "expenses": [
         {
+          "id": 6,
           "amount": "100",
           "category": "transport",
           "description": "机场快轨车费",

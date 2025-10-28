@@ -1,8 +1,31 @@
 const express = require('express');
 const router = express.Router();
+const { geocodeAddress } = require('../services/mapService');
 
-// 此文件中的路由已废弃，因为前端现在直接使用百度地图JS SDK进行路线规划。
-// 保留此空文件以避免在 index.js 中产生引用错误，后续可以安全移除。
+/**
+ * POST /api/map/geocode
+ * 接收地址，返回经纬度
+ */
+router.post('/geocode', async (req, res) => {
+    const { address } = req.body;
+
+    if (!address) {
+        return res.status(400).json({ error: 'Address is required.' });
+    }
+
+    try {
+        const coordinates = await geocodeAddress(address);
+        console.log('Geocoding endpoint result for address:', address, coordinates);
+        if (coordinates) {
+            res.status(200).json(coordinates);
+        } else {
+            res.status(404).json({ error: 'Could not find coordinates for the given address.' });
+        }
+    } catch (error) {
+        console.error('Geocoding endpoint error:', error);
+        res.status(500).json({ error: 'Failed to geocode address.' });
+    }
+});
 
 module.exports = router;
 
