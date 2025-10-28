@@ -227,6 +227,7 @@ import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
+import { user as globalUser } from '../store/userStore'; // 引入全局用户状态
 import { 
   MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound
 } from '@element-plus/icons-vue';
@@ -235,7 +236,6 @@ import 'element-plus/es/components/message/style/css'
 const route = useRoute();
 const router = useRouter();
 
-const user = ref(null);
 const trip = ref(null);
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -277,13 +277,7 @@ const groupedEvents = computed(() => {
 });
 
 onMounted(async () => {
-  const { data: authData } = await supabase.auth.getUser();
-  if (authData.user) {
-    user.value = authData.user;
-  } else {
-    router.push({ name: 'Login' });
-    return;
-  }
+  // onMounted 不再需要手动获取用户，由 App.vue 的监听器自动处理
   
   // 加载历史对话
   const storedHistory = sessionStorage.getItem('chatHistory');
@@ -339,6 +333,14 @@ const fetchTripDetails = async () => {
         throw new Error('行程加载失败');
     }
     const data = await response.json();
+    
+    // 权限检查：确保当前用户是行程的所有者
+    if (globalUser.value && data.user_id !== globalUser.value.id) {
+        ElMessage.error('您没有权限查看此行程。');
+        router.push({ name: 'Dashboard' });
+        return;
+    }
+
     trip.value = data;
     // 为从数据库加载的事件添加 tempId，使用数据库的 id
     if (trip.value.events && Array.isArray(trip.value.events)) {
@@ -640,7 +642,7 @@ const sortAndRefresh = () => {
 const saveTrip = async () => {
   isSaving.value = true;
   try {
-    if (!user.value) {
+    if (!globalUser.value) {
       ElMessage.error('用户未登录，无法保存！');
       router.push({ name: 'Login' });
       return;
@@ -662,7 +664,7 @@ const saveTrip = async () => {
       },
       body: JSON.stringify({
         tripData: tripDataToSave,
-        userId: user.value.id,
+        userId: globalUser.value.id,
       }),
     });
 

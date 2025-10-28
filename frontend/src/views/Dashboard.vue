@@ -12,7 +12,8 @@
         </span>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+            <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+            <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -81,6 +82,8 @@ const handleLogout = async () => {
 const handleCommand = (command) => {
   if (command === 'logout') {
     handleLogout();
+  } else if (command === 'profile') {
+    router.push({ name: 'Profile' });
   }
 };
 </script>

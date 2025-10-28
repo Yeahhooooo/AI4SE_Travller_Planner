@@ -25,11 +25,13 @@ app.use(express.json());
 const authRoutes = require('./routes/auth');
 const tripRoutes = require('./routes/trips');
 const mapRoutes = require('./routes/map');
+const profileRoutes = require('./routes/profiles'); // 引入 profile 路由
 
 // 使用路由
 app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/map', mapRoutes);
+app.use('/api/profiles', profileRoutes); // 使用 profile 路由
 
 
 app.get('/', (req, res) => {

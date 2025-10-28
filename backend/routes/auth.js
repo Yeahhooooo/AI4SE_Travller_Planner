@@ -26,7 +26,11 @@ router.post('/register', async (req, res) => {
     if (data.user) {
         const { error: profileError } = await supabase
             .from('profiles')
-            .insert([{ id: data.user.id, username: email.split('@')[0] }]);
+            .insert([{ 
+                id: data.user.id, 
+                username: email.split('@')[0],
+                travel_preferences: '无' // 添加默认旅行偏好
+            }]);
         
         if (profileError) {
             // 即便 profile 创建失败，注册本身也算成功，这里只记录错误

@@ -6,6 +6,7 @@ import Register from '../views/Register.vue';
 import Dashboard from '../views/Dashboard.vue';
 import Plan from '../views/Plan.vue';
 import TripDetails from '../views/TripDetails.vue';
+import Profile from '../views/Profile.vue'; // 引入 Profile 组件
 
 const routes = [
   {
@@ -34,6 +35,12 @@ const routes = [
     path: '/trip/:id',
     name: 'TripDetails',
     component: TripDetails,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
     meta: { requiresAuth: true },
   },
   {

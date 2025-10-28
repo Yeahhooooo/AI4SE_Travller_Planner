@@ -34,6 +34,7 @@ import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage } from 'element-plus';
+import { setUser } from '../store/userStore'; // 引入 setUser
 
 const router = useRouter();
 const loginFormRef = ref();
@@ -58,11 +59,17 @@ const handleLogin = async (formEl) => {
     if (valid) {
       loading.value = true;
       try {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: loginForm.email,
           password: loginForm.password,
         });
         if (error) throw error;
+        
+        // 登录成功后，将用户信息存储到全局状态
+        if (data.user) {
+          setUser(data.user);
+        }
+
         ElMessage.success('登录成功！');
         router.push({ name: 'Dashboard' });
       } catch (error) {
