@@ -6,6 +6,16 @@
         <span class="text-xl font-semibold">AI 旅行规划助手</span>
       </div>
       <div>
+        <el-tooltip content="有新想法？让AI帮你进一步完善行程" placement="bottom">
+          <el-button 
+            type="success"
+            :icon="ChatDotRound" 
+            @click="drawerVisible = true"
+            style="font-weight:bold;font-size:16px;border-radius:22px;padding:0 20px;background:linear-gradient(90deg,#2563eb 60%,#38b2ac 100%);color:#fff;box-shadow:0 2px 8px #2563eb22;"
+          >
+            AI智能完善
+          </el-button>
+        </el-tooltip>
         <el-button 
           v-if="isPreview"
           type="primary" 
@@ -21,7 +31,12 @@
 
     <el-container>
       <el-aside width="500px" class="bg-white p-6 border-r flex flex-col">
-        <h2 class="text-2xl font-bold mb-4 flex-shrink-0">路线地图</h2>
+        <el-card shadow="hover" class="mb-4 bg-gradient-to-r from-blue-50 to-teal-50 border-0">
+          <div class="flex items-center gap-2">
+            <el-icon :size="22" class="text-blue-500"><MapLocation /></el-icon>
+            <span class="text-xl font-bold tracking-wide text-blue-700">路线地图</span>
+          </div>
+        </el-card>
         <div id="map-container" class="w-full rounded-lg flex-grow bg-gray-200">
           <div v-if="mapLoadingText" class="flex items-center justify-center h-full">
             <p class="text-gray-500">{{ mapLoadingText }}</p>
@@ -32,8 +47,12 @@
       <el-main class="bg-gray-50 p-8" v-loading="isLoading" element-loading-text="正在加载行程详情...">
         <div v-if="!isLoading && trip" class="max-w-5xl mx-auto">
           <!-- 行程头部信息 -->
-          <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">{{ trip.name }}</h1>
+          <el-card shadow="hover" class="mb-8 bg-gradient-to-r from-teal-50 to-blue-50 border-0">
+            <div class="flex items-center gap-2 mb-2">
+              <el-icon :size="22" class="text-teal-500"><Finished /></el-icon>
+              <span class="text-2xl font-bold tracking-wide text-teal-700">行程安排</span>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-800 mt-2">{{ trip.name }}</h1>
             <div class="flex items-center text-gray-500 mt-2">
               <span>{{ formatDate(trip.start_date) }}</span>
               <el-icon class="mx-2"><Right /></el-icon>
@@ -41,7 +60,7 @@
               <el-divider direction="vertical" />
               <span>预算: <strong>¥{{ trip.budget }}</strong></span>
             </div>
-          </div>
+          </el-card>
 
           <!-- 时间线按天分组 -->
           <div v-for="(day, date) in groupedEvents" :key="date">
@@ -49,7 +68,7 @@
             <el-timeline>
               <el-timeline-item 
                 v-for="event in day" 
-                :key="event.id" 
+                :key="event.tempId" 
                 :timestamp="formatTimestamp(event.start_time)" 
                 placement="top"
                 :type="getEventType(event.type)"
@@ -69,7 +88,7 @@
                   </div>
                   <div class="mt-2 flex justify-end space-x-2">
                     <el-button size="small" :icon="Edit" circle @click="openEditDialog(event)" />
-                    <el-button size="small" :icon="Delete" type="danger" circle @click="handleDeleteEvent(event.id)" />
+                    <el-button size="small" :icon="Delete" type="danger" circle @click="handleDeleteEvent(event.tempId)" />
                   </div>
                 </el-card>
               </el-timeline-item>
@@ -136,6 +155,70 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- AI 对话抽屉 -->
+    <el-drawer
+      title="AI 旅行助手"
+      v-model="drawerVisible"
+      width="420px"
+      :with-header="false"
+      class="ai-drawer"
+      @open="loadChatHistory"
+    >
+      <div class="flex flex-col h-full bg-gray-50">
+        <div class="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
+          <div class="flex items-center gap-2">
+            <el-icon :size="22" class="text-blue-500"><ChatDotRound /></el-icon>
+            <span class="font-bold text-lg">AI 旅行助手</span>
+          </div>
+          <el-button type="text" @click="drawerVisible = false" icon="el-icon-close" circle></el-button>
+        </div>
+        <div class="chat-list">
+          <template v-if="chatHistory.length">
+            <div v-for="(chat, index) in chatHistory" :key="index" class="flex" :class="chat.role === 'user' ? 'justify-end' : 'justify-start'">
+              <div v-if="chat.role === 'user'" class="max-w-[70%]">
+                <div class="chat-bubble user">
+                  {{ chat.content }}
+                </div>
+                <div class="chat-meta">
+                  我
+                </div>
+              </div>
+              <div v-else class="max-w-[70%]">
+                <div class="chat-bubble ai" v-html="chat.content"></div>
+                <div class="chat-meta ai">
+                  AI助手
+                </div>
+              </div>
+            </div>
+          </template>
+          <el-empty v-else description="暂无对话记录" />
+        </div>
+        <div class="input-area">
+          <el-input
+            v-model="newUserPrompt"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+            resize="none"
+            placeholder="请输入你对当前行程的修改要求..."
+            class="mb-2"
+            @keyup.enter.native="handleAiRefine"
+          />
+          <el-button 
+            type="primary" 
+            @click="handleAiRefine" 
+            :loading="isRefining"
+            class="w-full"
+            size="large"
+            style="font-size: 16px;"
+          >
+            <el-icon><ChatDotRound /></el-icon> 发送
+          </el-button>
+        </div>
+      </div>
+    </el-drawer>
   </el-container>
 </template>
 
@@ -145,7 +228,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound
 } from '@element-plus/icons-vue';
 import 'element-plus/es/components/message/style/css'
 
@@ -158,6 +241,13 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const mapLoadingText = ref('正在加载地图...');
 let map = null; // 地图实例
+
+// --- AI 对话抽屉相关 ---
+const drawerVisible = ref(false);
+const chatHistory = ref([]);
+const newUserPrompt = ref('');
+const isRefining = ref(false);
+
 
 // --- 对话框和表单相关 ---
 const dialogVisible = ref(false);
@@ -195,6 +285,12 @@ onMounted(async () => {
     return;
   }
   
+  // 加载历史对话
+  const storedHistory = sessionStorage.getItem('chatHistory');
+  if (storedHistory) {
+    chatHistory.value = JSON.parse(storedHistory);
+  }
+
   if (isPreview.value) {
     loadPreviewData();
   } else {
@@ -215,6 +311,14 @@ const loadPreviewData = () => {
         budget: parsedData.budget,
         events: parsedData.events
     };
+    // 确保预览数据也有 tempId
+    if (trip.value.events && Array.isArray(trip.value.events)) {
+        trip.value.events.forEach((event, index) => {
+            if (!event.tempId) {
+                event.tempId = `temp_${Date.now()}_${index}`;
+            }
+        });
+    }
     isLoading.value = false;
     // 使用 nextTick 确保 DOM 已经更新
     nextTick(() => {
@@ -236,6 +340,12 @@ const fetchTripDetails = async () => {
     }
     const data = await response.json();
     trip.value = data;
+    // 为从数据库加载的事件添加 tempId，使用数据库的 id
+    if (trip.value.events && Array.isArray(trip.value.events)) {
+        trip.value.events.forEach(event => {
+            event.tempId = event.id;
+        });
+    }
     // 使用 nextTick 确保 DOM 已经更新
     nextTick(() => {
       initMap(); // 直接初始化地图
@@ -287,7 +397,7 @@ const initMap = () => {
   // 百度地图API限制：最多支持10个途经点
   if (waypoints.length > 10) {
     ElMessage.warning('途经点超过10个，地图上仅显示部分路线。');
-    waypoints = waypoints.slice(0, 10);
+    // waypoints = waypoints.slice(0, 10);
   }
 
   const driving = new BMapGL.DrivingRoute(map, {
@@ -314,7 +424,7 @@ const openAddDialog = (date) => {
   isEditing.value = false;
   dialogTitle.value = '添加新事件';
   currentEvent.value = {
-    id: Date.now(), // 临时ID
+    tempId: `temp_${Date.now()}`, // 添加临时ID
     description: '',
     location: '',
     start_time: `${date}T12:00:00`, // 默认中午12点
@@ -328,7 +438,7 @@ const openEditDialog = (event) => {
   console.log('Editing event:', event);
   isEditing.value = true;
   dialogTitle.value = '编辑事件';
-  currentEditingEventId.value = event.id; // 保存正在编辑的事件ID
+  currentEditingEventId.value = event.tempId; // 保存正在编辑的事件的 tempId
   // 深拷贝事件对象，确保 expenses 也是新的数组
   currentEvent.value = JSON.parse(JSON.stringify(event));
   originalLocation.value = event.location; // 保存原始地址
@@ -399,10 +509,10 @@ const handleSaveEvent = async () => {
 
     if (isEditing.value) {
       // 使用保存的ID来查找事件
-      const index = events.findIndex(e => e.id === currentEditingEventId.value);
+      const index = events.findIndex(e => e.tempId === currentEditingEventId.value);
       if (index !== -1) {
         // 更新事件时保留原始ID
-        events[index] = { ...eventToSave, id: currentEditingEventId.value };
+        events[index] = { ...eventToSave, tempId: currentEditingEventId.value };
       }
     } else {
       events.push(eventToSave);
@@ -418,7 +528,77 @@ const handleSaveEvent = async () => {
   }
 };
 
-const handleDeleteEvent = (eventId) => {
+const handleAiRefine = async () => {
+  if (!newUserPrompt.value.trim()) {
+    ElMessage.warning('请输入您的要求。');
+    return;
+  }
+  isRefining.value = true;
+
+  // 构造发送给后端的请求体
+  const requestBody = {
+    prompt: newUserPrompt.value,
+    currentTrip: trip.value,
+    chatHistory: chatHistory.value,
+  };
+
+  try {
+    const response = await fetch('http://localhost:3001/api/trips/refine', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'AI 优化行程失败');
+    }
+
+    const refinedTripData = await response.json();
+
+    // 更新前端的 trip 数据
+    trip.value = refinedTripData;
+
+    // 为AI优化后的新行程事件添加 tempId
+    if (trip.value.events && Array.isArray(trip.value.events)) {
+        trip.value.events.forEach((event, index) => {
+            // 如果事件已经有 id（来自数据库），则用它作为 tempId，否则创建新的
+            event.tempId = event.id || `temp_${Date.now()}_${index}`;
+        });
+    }
+
+    // 更新对话历史
+    chatHistory.value.push({ role: 'user', content: newUserPrompt.value });
+    chatHistory.value.push({ role: 'assistant', content: '已根据您的要求更新行程计划。' }); // 可以用更详细的AI回复
+    sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory.value));
+
+    // 清空输入框
+    newUserPrompt.value = '';
+
+    // 更新行程缓存
+    sessionStorage.setItem('tripPreview', JSON.stringify(refinedTripData));
+
+
+    ElNotification({
+      title: 'AI 优化成功',
+      message: '行程已根据您的新要求更新。',
+      type: 'success',
+    });
+
+    // 刷新地图和视图
+    sortAndRefresh();
+
+  } catch (error) {
+    console.error('Error refining trip with AI:', error);
+    ElMessage.error(`AI 优化失败: ${error.message}`);
+  } finally {
+    isRefining.value = false;
+  }
+};
+
+const handleDeleteEvent = (tempId) => {
     ElMessageBox.confirm(
         '确定要删除这个事件吗？此操作无法撤销。',
         '警告',
@@ -429,7 +609,7 @@ const handleDeleteEvent = (eventId) => {
         }
     ).then(() => {
         const events = trip.value.events || trip.value.trip_events;
-        const eventIndex = events.findIndex(e => e.id === eventId);
+        const eventIndex = events.findIndex(e => e.tempId === tempId);
         
         if (eventIndex > -1) {
             events.splice(eventIndex, 1);
@@ -544,4 +724,66 @@ const calculateTotalExpense = (expenses) => {
   if (!expenses) return 0;
   return expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
 };
+
+// 新增方法：加载对话历史
+const loadChatHistory = () => {
+  const storedHistory = sessionStorage.getItem('chatHistory');
+  if (storedHistory) {
+    chatHistory.value = JSON.parse(storedHistory);
+  } else {
+    chatHistory.value = [];
+  }
+};
 </script>
+
+<style scoped>
+.ai-drawer .el-drawer__body {
+  padding: 0 !important;
+  background: #f7fafc;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.ai-drawer .chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  background: #f7fafc;
+}
+.ai-drawer .chat-bubble {
+  max-width: 70%;
+  margin-bottom: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.ai-drawer .chat-bubble.user {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 18px 4px 18px 18px;
+  margin-left: auto;
+  padding: 10px 16px;
+}
+.ai-drawer .chat-bubble.ai {
+  background: #fff;
+  color: #222;
+  border-radius: 4px 18px 18px 18px;
+  margin-right: auto;
+  border: 1px solid #e5e7eb;
+  padding: 10px 16px;
+}
+.ai-drawer .chat-meta {
+  font-size: 12px;
+  color: #a0aec0;
+  margin-bottom: 4px;
+  text-align: right;
+}
+.ai-drawer .chat-meta.ai {
+  text-align: left;
+}
+.ai-drawer .input-area {
+  padding: 12px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+</style>

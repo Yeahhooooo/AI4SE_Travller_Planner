@@ -44,6 +44,48 @@ router.post('/generate', async (req, res) => {
 });
 
 /**
+ * POST /api/trips/refine
+ * 接收现有行程和新的用户提示，调用LLM进行修改，并返回新的行程方案。
+ */
+router.post('/refine', async (req, res) => {
+    const { prompt, currentTrip, chatHistory } = req.body;
+
+    if (!prompt || !currentTrip) {
+        return res.status(400).json({ error: 'Prompt and currentTrip are required.' });
+    }
+
+    // 构建新的、更丰富的 prompt
+    const refinePrompt = `
+        这是一个用户优化旅行计划的请求。
+        历史对话上下文:
+        ${JSON.stringify(chatHistory, null, 2)}
+
+        用户当前的行程计划如下:
+        ${JSON.stringify(currentTrip, null, 2)}
+
+        用户的新要求是: "${prompt}"
+
+        请你基于以上所有信息，生成一份修改后的、完整的行程计划JSON。
+        请注意，你必须返回一个完整的行程计划，而不仅仅是修改的部分。
+        返回的JSON结构必须和用户当前的行程计划结构完全一致。
+    `;
+
+    try {
+        const aiResponse = await callLLMApi(refinePrompt);
+
+        if (!aiResponse || !aiResponse.trip_name || !Array.isArray(aiResponse.events)) {
+            throw new Error('Invalid response format from LLM during refinement.');
+        }
+
+        res.status(200).json(aiResponse);
+
+    } catch (error) {
+        console.error('Error refining trip:', error);
+        res.status(500).json({ error: 'Failed to refine trip.', details: error.message });
+    }
+});
+
+/**
  * POST /api/trips
  * 接收一个完整的行程对象并将其持久化到数据库。
  */

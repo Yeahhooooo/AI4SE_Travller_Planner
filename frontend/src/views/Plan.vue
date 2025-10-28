@@ -120,6 +120,13 @@ const generateTrip = async () => {
     // 将返回的完整行程数据存储在 sessionStorage 中，用于预览
     sessionStorage.setItem('tripPreview', JSON.stringify(tripData));
 
+    // 新增：将首次大模型请求和响应写入 chatHistory
+    const chatHistory = [
+      { role: 'user', content: prompt.value },
+      { role: 'assistant', content: 'AI 已为您生成初始行程。' }
+    ];
+    sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+
     ElNotification({
       title: '规划成功！',
       message: '您的专属行程已生成，即将跳转到预览页。',
