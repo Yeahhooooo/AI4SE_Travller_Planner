@@ -36,8 +36,8 @@
             
             <!-- 预留的语音输入按钮位置 -->
             <div class="flex justify-between items-center mt-4">
-                <el-button type="info" plain :icon="Microphone" @click="handleVoiceInput">
-                    语音输入 (待实现)
+                <el-button :type="isRecording ? 'danger' : 'info'" plain :icon="Microphone" @click="handleVoiceInput">
+                    {{ isRecording ? '正在录音...' : '语音输入' }}
                 </el-button>
                 <el-button type="primary" @click="generateTrip" :loading="isLoading">
                     <span v-if="!isLoading">生成行程</span>
@@ -52,16 +52,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
 import { ArrowDown, MapLocation, Microphone } from '@element-plus/icons-vue';
+import { XfVoiceDictation } from '@muguilin/xf-voice-dictation';
 
 const router = useRouter();
 const user = ref(null);
 const prompt = ref('');
 const isLoading = ref(false);
+const isRecording = ref(false);
+let xfVoice = null;
+const isVoiceServiceReady = ref(false);
 
 onMounted(async () => {
   const { data } = await supabase.auth.getUser();
@@ -70,7 +74,54 @@ onMounted(async () => {
   } else {
     router.push({ name: 'Login' });
   }
+  initXfVoice();
 });
+
+onUnmounted(() => {
+  if (xfVoice) {
+    xfVoice.destroy();
+  }
+});
+
+const initXfVoice = () => {
+  try {
+    // 请替换为您的讯飞开放平台凭证
+    xfVoice = new XfVoiceDictation({
+      APPID: '300d41db',
+      APISecret: 'NzE1ZTBlNzE1NWVjYjdiMzExOWMyYjM3',
+      APIKey: 'c7e68ba2da41fe90fc773cef2bdca5f8',
+
+      // 监听录音状态变化回调
+      onWillStatusChange: (oldStatus, newStatus) => {
+        if (newStatus === 'ing') {
+          isRecording.value = true;
+        } else if (newStatus === 'end') {
+          isRecording.value = false;
+        }
+      },
+
+      // 监听识别结果的变化回调
+      onTextChange: (text) => {
+        prompt.value = text;
+      },
+
+      // 监听识别错误回调
+      onError: (error) => {
+        ElMessage.error(`语音识别失败: ${error.message}`);
+        console.error('XF Voice Error:', error);
+        isRecording.value = false;
+      }
+    });
+
+    // 如果代码执行到这里没有抛出异常，说明基础初始化成功
+    isVoiceServiceReady.value = true;
+
+  } catch (error) {
+    isVoiceServiceReady.value = false;
+    ElMessage.error('语音服务初始化失败，请检查浏览器兼容性或刷新页面重试。');
+    console.error('Failed to initialize XF Voice Service:', error);
+  }
+};
 
 const goHome = () => {
   router.push({ name: 'Dashboard' });
@@ -88,8 +139,15 @@ const handleCommand = (command) => {
 };
 
 const handleVoiceInput = () => {
-    // 预留功能
-    ElMessage.info('语音输入功能正在开发中...');
+    if (!isVoiceServiceReady.value) {
+        ElMessage.error('语音服务尚未就绪，请稍候或刷新页面。');
+        return;
+    }
+    if (isRecording.value) {
+        xfVoice.stop();
+    } else {
+        xfVoice.start();
+    }
 };
 
 const generateTrip = async () => {

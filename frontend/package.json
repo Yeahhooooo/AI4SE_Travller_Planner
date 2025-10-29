@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@muguilin/xf-voice-dictation": "^1.0.1",
     "@supabase/supabase-js": "^2.76.1",
     "element-plus": "^2.11.5",
     "unplugin-auto-import": "^20.2.0",

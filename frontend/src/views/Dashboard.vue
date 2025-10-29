@@ -47,7 +47,7 @@
                 </div>
               </template>
               <p class="text-gray-600 mb-4">查看和管理你所有已保存的旅行计划，随时回顾和修改，并跟踪相关开销。</p>
-              <el-button type="primary" class="w-full">查看计划</el-button>
+              <el-button type="primary" class="w-full" @click="goToTripList">查看计划</el-button>
             </el-card>
           </el-col>
         </el-row>
@@ -72,6 +72,10 @@ onMounted(async () => {
 
 const goToPlan = () => {
   router.push({ name: 'Plan' });
+};
+
+const goToTripList = () => {
+  router.push({ name: 'TripList' });
 };
 
 const handleLogout = async () => {

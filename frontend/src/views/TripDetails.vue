@@ -25,6 +25,15 @@
         >
           保存到我的计划
         </el-button>
+        <el-button 
+          v-if="!isPreview && isModified"
+          type="warning" 
+          :icon="Finished"
+          @click="updateTrip"
+          :loading="isSaving"
+        >
+          保存更改
+        </el-button>
         <el-button :icon="Back" @click="goBack">返回</el-button>
       </div>
     </el-header>
@@ -223,7 +232,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
@@ -247,6 +256,8 @@ const drawerVisible = ref(false);
 const chatHistory = ref([]);
 const newUserPrompt = ref('');
 const isRefining = ref(false);
+const isModified = ref(false);
+let originalTripJSON = ''; // 用于存储原始行程的JSON字符串
 
 
 // --- 对话框和表单相关 ---
@@ -260,6 +271,7 @@ const currentEditingEventId = ref(null); // 显式跟踪正在编辑的事件ID
 
 const tripId = computed(() => route.params.id);
 const isPreview = computed(() => tripId.value === 'preview');
+
 
 // 将事件按日期分组
 const groupedEvents = computed(() => {
@@ -275,6 +287,13 @@ const groupedEvents = computed(() => {
     return acc;
   }, {});
 });
+
+watch(trip, (newTrip) => {
+  if (originalTripJSON) {
+    const newTripJSON = JSON.stringify(newTrip);
+    isModified.value = newTripJSON !== originalTripJSON;
+  }
+}, { deep: true });
 
 onMounted(async () => {
   // onMounted 不再需要手动获取用户，由 App.vue 的监听器自动处理
@@ -342,6 +361,8 @@ const fetchTripDetails = async () => {
     }
 
     trip.value = data;
+    originalTripJSON = JSON.stringify(data); // 存储原始状态
+    isModified.value = false; // 重置修改状态
     // 为从数据库加载的事件添加 tempId，使用数据库的 id
     if (trip.value.events && Array.isArray(trip.value.events)) {
         trip.value.events.forEach(event => {
@@ -695,6 +716,39 @@ const saveTrip = async () => {
   }
 
   console.log('Save trip function executed, current trip plan :', trip.value);
+};
+
+const updateTrip = async () => {
+  isSaving.value = true;
+  try {
+    const response = await fetch(`http://localhost:3001/api/trips/${tripId.value}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tripData: trip.value }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to update the trip.');
+    }
+
+    ElNotification({
+      title: '更新成功',
+      message: '您的行程更改已成功保存。',
+      type: 'success',
+    });
+
+    // 重新获取数据以同步状态并重置 isModified
+    await fetchTripDetails();
+
+  } catch (error) {
+    console.error('Error updating trip:', error);
+    ElMessage.error(`更新失败: ${error.message}`);
+  } finally {
+    isSaving.value = false;
+  }
 };
 
 const goHome = () => router.push({ name: 'Dashboard' });
