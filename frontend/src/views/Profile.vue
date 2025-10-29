@@ -33,6 +33,25 @@
             placeholder="例如：喜欢自然风光，对历史建筑感兴趣，预算有限，偏好经济型住宿..."
           />
         </el-form-item>
+
+        <el-divider>API 密钥管理</el-divider>
+
+        <el-form-item label="讯飞APPID" prop="xf_appid">
+          <el-input v-model="profile.xf_appid" placeholder="请输入讯飞语音服务的 APPID" />
+        </el-form-item>
+        <el-form-item label="讯飞APISecret" prop="xf_apisecret">
+          <el-input v-model="profile.xf_apisecret" type="password" show-password placeholder="请输入讯飞语音服务的 APISecret" />
+        </el-form-item>
+        <el-form-item label="讯飞APIKey" prop="xf_apikey">
+          <el-input v-model="profile.xf_apikey" type="password" show-password placeholder="请输入讯飞语音服务的 APIKey" />
+        </el-form-item>
+        <el-form-item label="LLM APIKey" prop="llm_apikey">
+          <el-input v-model="profile.llm_apikey" type="password" show-password placeholder="请输入大语言模型服务的 APIKey" />
+        </el-form-item>
+        <el-form-item label="地图 APIKey" prop="map_apikey">
+          <el-input v-model="profile.map_apikey" type="password" show-password placeholder="请输入地图服务的 APIKey" />
+        </el-form-item>
+
         <el-form-item>
           <el-button type="primary" @click="updateProfile" :loading="isUpdating">
             保存更改
@@ -101,6 +120,11 @@ const updateProfile = async () => {
       body: JSON.stringify({
         username: profile.value.username,
         travel_preferences: profile.value.travel_preferences,
+        xf_appid: profile.value.xf_appid,
+        xf_apisecret: profile.value.xf_apisecret,
+        xf_apikey: profile.value.xf_apikey,
+        llm_apikey: profile.value.llm_apikey,
+        map_apikey: profile.value.map_apikey,
       }),
     });
 

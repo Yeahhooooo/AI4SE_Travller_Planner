@@ -1,14 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
+const { supabase } = require('../supabase');
 const { callLLMApi } = require('../services/llmService');
-
-// 从环境变量中获取 Supabase 配置
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-// 创建 Supabase 客户端
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * POST /api/trips/generate
@@ -19,15 +12,18 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
  * 接收用户旅行需求，模拟 AI 分析，并直接返回生成的行程 JSON 数据，不进行持久化。
  */
 router.post('/generate', async (req, res) => {
-    const { prompt } = req.body;
+    const { prompt, apiKey } = req.body;
 
     if (!prompt) {
         return res.status(400).json({ error: 'Prompt is required.' });
     }
+    if (!apiKey) {
+        return res.status(400).json({ error: 'API key is required.' });
+    }
 
     try {
         // --- 调用大语言模型 (LLM) ---
-        const aiResponse = await callLLMApi(prompt);
+        const aiResponse = await callLLMApi(prompt, apiKey);
 
         // 对 LLM 的返回结果进行基本校验
         if (!aiResponse || !aiResponse.trip_name || !Array.isArray(aiResponse.events)) {
@@ -48,10 +44,13 @@ router.post('/generate', async (req, res) => {
  * 接收现有行程和新的用户提示，调用LLM进行修改，并返回新的行程方案。
  */
 router.post('/refine', async (req, res) => {
-    const { prompt, currentTrip, chatHistory } = req.body;
+    const { prompt, currentTrip, chatHistory, apiKey } = req.body;
 
     if (!prompt || !currentTrip) {
         return res.status(400).json({ error: 'Prompt and currentTrip are required.' });
+    }
+    if (!apiKey) {
+        return res.status(400).json({ error: 'API key is required.' });
     }
 
     // 构建新的、更丰富的 prompt
@@ -71,7 +70,7 @@ router.post('/refine', async (req, res) => {
     `;
 
     try {
-        const aiResponse = await callLLMApi(refinePrompt);
+        const aiResponse = await callLLMApi(refinePrompt, apiKey);
 
         if (!aiResponse || !aiResponse.trip_name || !Array.isArray(aiResponse.events)) {
             throw new Error('Invalid response format from LLM during refinement.');
@@ -127,6 +126,8 @@ router.post('/', async (req, res) => {
             location: event.location,
             start_time: event.start_time,
             end_time: event.end_time,
+            latitude: event.latitude,
+            longitude: event.longitude,
         }));
 
         const { data: createdEvents, error: eventsError } = await supabase
@@ -227,6 +228,112 @@ router.get('/:id', async (req, res) => {
     } catch (error) {
         console.error(`Error fetching trip ${id}:`, error);
         res.status(500).json({ error: 'Failed to fetch trip details.', details: error.message });
+    }
+});
+
+/**
+ * PUT /api/trips/:id
+ * 根据 ID 更新一个已存在的行程
+ */
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { tripData } = req.body;
+
+    if (!tripData) {
+        return res.status(400).json({ error: 'Trip data is required.' });
+    }
+
+    try {
+        // --- 1. 更新 'trips' 表中的主信息 ---
+        const { error: tripUpdateError } = await supabase
+            .from('trips')
+            .update({
+                name: tripData.name, // 注意：这里字段名是 name
+                start_date: tripData.start_date,
+                end_date: tripData.end_date,
+                budget: tripData.budget,
+            })
+            .eq('id', id);
+
+        if (tripUpdateError) throw tripUpdateError;
+
+        // --- 2. 删除旧的关联数据（事件和费用）---
+        // 首先，获取所有旧事件的 ID，以便删除它们的费用
+        const { data: oldEvents, error: oldEventsError } = await supabase
+            .from('trip_events')
+            .select('id')
+            .eq('trip_id', id);
+
+        if (oldEventsError) throw oldEventsError;
+
+        if (oldEvents && oldEvents.length > 0) {
+            const oldEventIds = oldEvents.map(e => e.id);
+            
+            // 删除与旧事件关联的所有费用
+            const { error: expensesDeleteError } = await supabase
+                .from('expenses')
+                .delete()
+                .in('event_id', oldEventIds);
+            if (expensesDeleteError) throw expensesDeleteError;
+
+            // 删除所有旧事件
+            const { error: eventsDeleteError } = await supabase
+                .from('trip_events')
+                .delete()
+                .eq('trip_id', id);
+            if (eventsDeleteError) throw eventsDeleteError;
+        }
+
+        // --- 3. 插入新的事件和费用数据 ---
+        // 插入新的 'trip_events'
+        const eventsToInsert = tripData.events.map(event => ({
+            trip_id: id,
+            type: event.type,
+            description: event.description,
+            location: event.location,
+            start_time: event.start_time,
+            end_time: event.end_time,
+            latitude: event.latitude,
+            longitude: event.longitude,
+        }));
+
+        const { data: createdEvents, error: eventsInsertError } = await supabase
+            .from('trip_events')
+            .insert(eventsToInsert)
+            .select();
+
+        if (eventsInsertError) throw eventsInsertError;
+
+        // 准备并插入新的 'expenses' 数据
+        const expensesToInsert = [];
+        tripData.events.forEach((event, index) => {
+            if (event.expenses && event.expenses.length > 0) {
+                const correspondingEventId = createdEvents[index].id;
+                event.expenses.forEach(expense => {
+                    expensesToInsert.push({
+                        event_id: correspondingEventId,
+                        amount: expense.amount,
+                        category: expense.category,
+                        description: expense.description,
+                        expense_date: expense.expense_date,
+                    });
+                });
+            }
+        });
+
+        if (expensesToInsert.length > 0) {
+            const { error: expensesInsertError } = await supabase
+                .from('expenses')
+                .insert(expensesToInsert);
+
+            if (expensesInsertError) throw expensesInsertError;
+        }
+
+        res.status(200).json({ message: 'Trip updated successfully!' });
+
+    } catch (error) {
+        console.error(`Error updating trip ${id}:`, error);
+        res.status(500).json({ error: 'Failed to update trip.', details: error.message });
     }
 });
 

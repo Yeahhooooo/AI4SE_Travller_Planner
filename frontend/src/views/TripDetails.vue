@@ -235,12 +235,14 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
-import { ElMessage, ElNotification } from 'element-plus';
-import { user as globalUser } from '../store/userStore'; // 引入全局用户状态
+import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
+import { user, profile } from '../store/userStore';
 import { 
   MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound
 } from '@element-plus/icons-vue';
 import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
+import 'element-plus/es/components/notification/style/css'
 
 const route = useRoute();
 const router = useRouter();
@@ -354,7 +356,7 @@ const fetchTripDetails = async () => {
     const data = await response.json();
     
     // 权限检查：确保当前用户是行程的所有者
-    if (globalUser.value && data.user_id !== globalUser.value.id) {
+    if (user.value && data.user_id !== user.value.id) {
         ElMessage.error('您没有权限查看此行程。');
         router.push({ name: 'Dashboard' });
         return;
@@ -504,10 +506,19 @@ const handleSaveEvent = async () => {
     const locationChanged = currentEvent.value.location !== originalLocation.value;
 
     if (!isEditing.value || locationChanged) {
+      // 检查地图 API Key 是否存在
+      if (!profile.value?.map_apikey) {
+        ElMessage.error('未找到地图 API Key，请在个人资料页面设置。');
+        return;
+      }
+
       const response = await fetch('http://localhost:3001/api/map/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: currentEvent.value.location }),
+        body: JSON.stringify({ 
+          address: currentEvent.value.location,
+          apiKey: profile.value.map_apikey // 传递地图 API Key
+        }),
       });
 
       if (!response.ok) {
@@ -556,6 +567,11 @@ const handleAiRefine = async () => {
     ElMessage.warning('请输入您的要求。');
     return;
   }
+  // 检查 API Key
+  if (!profile.value?.llm_apikey) {
+    ElMessage.error('未找到 LLM API Key，请在个人资料页面设置。');
+    return;
+  }
   isRefining.value = true;
 
   // 构造发送给后端的请求体
@@ -563,6 +579,7 @@ const handleAiRefine = async () => {
     prompt: newUserPrompt.value,
     currentTrip: trip.value,
     chatHistory: chatHistory.value,
+    apiKey: profile.value.llm_apikey, // 传递 API Key
   };
 
   try {
@@ -663,7 +680,7 @@ const sortAndRefresh = () => {
 const saveTrip = async () => {
   isSaving.value = true;
   try {
-    if (!globalUser.value) {
+    if (!user.value) {
       ElMessage.error('用户未登录，无法保存！');
       router.push({ name: 'Login' });
       return;
@@ -685,7 +702,7 @@ const saveTrip = async () => {
       },
       body: JSON.stringify({
         tripData: tripDataToSave,
-        userId: globalUser.value.id,
+        userId: user.value.id,
       }),
     });
 

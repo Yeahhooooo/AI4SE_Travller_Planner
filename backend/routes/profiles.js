@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../index');
+const { supabase } = require('../supabase');
 
 // 获取用户 Profile
 router.get('/:userId', async (req, res) => {
@@ -27,7 +27,15 @@ router.get('/:userId', async (req, res) => {
 // 更新用户 Profile
 router.put('/:userId', async (req, res) => {
     const { userId } = req.params;
-    const { username, travel_preferences } = req.body;
+    const { 
+        username, 
+        travel_preferences,
+        xf_appid,
+        xf_apisecret,
+        xf_apikey,
+        llm_apikey,
+        map_apikey 
+    } = req.body;
 
     if (!username) {
         return res.status(400).json({ error: '用户名不能为空' });
@@ -38,6 +46,11 @@ router.put('/:userId', async (req, res) => {
         .update({ 
             username, 
             travel_preferences,
+            xf_appid,
+            xf_apisecret,
+            xf_apikey,
+            llm_apikey,
+            map_apikey,
             updated_at: new Date(),
         })
         .eq('id', userId)

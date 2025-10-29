@@ -58,9 +58,9 @@ import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
 import { ArrowDown, MapLocation, Microphone } from '@element-plus/icons-vue';
 import { XfVoiceDictation } from '@muguilin/xf-voice-dictation';
+import { user, profile } from '../store/userStore';
 
 const router = useRouter();
-const user = ref(null);
 const prompt = ref('');
 const isLoading = ref(false);
 const isRecording = ref(false);
@@ -68,10 +68,8 @@ let xfVoice = null;
 const isVoiceServiceReady = ref(false);
 
 onMounted(async () => {
-  const { data } = await supabase.auth.getUser();
-  if (data.user) {
-    user.value = data.user;
-  } else {
+  // 用户状态现在由全局 userStore 管理，不需要本地获取
+  if (!user.value) {
     router.push({ name: 'Login' });
   }
   initXfVoice();
@@ -87,9 +85,9 @@ const initXfVoice = () => {
   try {
     // 请替换为您的讯飞开放平台凭证
     xfVoice = new XfVoiceDictation({
-      APPID: '300d41db',
-      APISecret: 'NzE1ZTBlNzE1NWVjYjdiMzExOWMyYjM3',
-      APIKey: 'c7e68ba2da41fe90fc773cef2bdca5f8',
+      APPID: profile.value?.xf_appid,
+      APISecret: profile.value?.xf_apisecret,
+      APIKey: profile.value?.xf_apikey,
 
       // 监听录音状态变化回调
       onWillStatusChange: (oldStatus, newStatus) => {
@@ -156,6 +154,12 @@ const generateTrip = async () => {
     return;
   }
 
+  // 检查 API Key 是否存在
+  if (!profile.value?.llm_apikey) {
+    ElMessage.error('未找到 LLM API Key，请在个人资料页面设置。');
+    return;
+  }
+
   isLoading.value = true;
 
   try {
@@ -165,7 +169,10 @@ const generateTrip = async () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt: prompt.value }),
+      body: JSON.stringify({ 
+        prompt: prompt.value,
+        apiKey: profile.value.llm_apikey // 传递 API Key
+      }),
     });
 
     if (!response.ok) {
