@@ -90,10 +90,28 @@
                     {{ event.location }}
                   </p>
                   <!-- 显示预期费用 -->
-                  <div v-if="event.expenses && event.expenses.length > 0" class="mt-2 text-sm text-orange-600">
-                    <el-tag type="warning" size="small" effect="light">
-                      预期消费: ¥{{ calculateTotalExpense(event.expenses) }}
-                    </el-tag>
+                  <div v-if="event.expenses && event.expenses.length > 0" class="mt-2">
+                    <div class="text-sm text-orange-600 mb-1">
+                      <el-tag type="warning" size="small" effect="light">
+                        预期消费: ¥{{ calculateTotalExpense(event.expenses) }}
+                      </el-tag>
+                    </div>
+                    <!-- 显示费用详细分类 -->
+                    <div class="flex flex-wrap gap-1">
+                      <el-tag 
+                        v-for="(expense, expIndex) in event.expenses" 
+                        :key="expIndex"
+                        size="small" 
+                        effect="plain"
+                        type="info"
+                        :title="expense.description || ''"
+                      >
+                        {{ getCategoryLabel(expense.category) }}: ¥{{ expense.amount }}
+                        <span v-if="expense.description" class="ml-1 text-gray-500">
+                          ({{ expense.description }})
+                        </span>
+                      </el-tag>
+                    </div>
                   </div>
                   <div class="mt-2 flex justify-end space-x-2">
                     <el-button size="small" :icon="Edit" circle @click="openEditDialog(event)" />
@@ -148,10 +166,21 @@
 
         <el-divider content-position="left">预期消费</el-divider>
         
-        <div v-for="(expense, index) in currentEvent.expenses" :key="index" class="flex items-center space-x-2 mb-2">
-          <el-input v-model="expense.category" placeholder="费用类别 (如门票)" class="flex-1"></el-input>
-          <el-input-number v-model="expense.amount" :min="0" placeholder="金额" class="w-32"></el-input-number>
-          <el-button :icon="Delete" type="danger" circle plain @click="removeExpense(index)"></el-button>
+        <div v-for="(expense, index) in currentEvent.expenses" :key="index" class="mb-3 p-3">
+          <div class="flex items-center space-x-2 mb-2">
+            <el-select v-model="expense.category" placeholder="选择费用类别" class="w-32" style="width: 50%;">
+              <el-option label="交通" value="transport"></el-option>
+              <el-option label="餐饮" value="food"></el-option>
+              <el-option label="门票" value="tickets"></el-option>
+              <el-option label="购物" value="shopping"></el-option>
+              <el-option label="住宿" value="lodging"></el-option>
+              <el-option label="娱乐" value="entertainment"></el-option>
+              <el-option label="其他" value="other"></el-option>
+            </el-select>
+            <el-input-number v-model="expense.amount" :min="0" placeholder="金额" class="w-32"></el-input-number>
+            <el-button :icon="Delete" type="danger" circle plain @click="removeExpense(index)"></el-button>
+          </div>
+          <el-input v-model="expense.description" placeholder="费用描述 (如: 地铁票、门票等)" size="small"></el-input>
         </div>
         
         <el-button :icon="Plus" @click="addExpense" class="w-full">添加消费项</el-button>
@@ -478,7 +507,7 @@ const addExpense = () => {
   if (!currentEvent.value.expenses) {
     currentEvent.value.expenses = [];
   }
-  currentEvent.value.expenses.push({ category: '', amount: 0 });
+  currentEvent.value.expenses.push({ category: 'other', amount: 0, description: '' });
 };
 
 const removeExpense = (index) => {
@@ -796,6 +825,20 @@ const getEventIcon = (type) => {
 const calculateTotalExpense = (expenses) => {
   if (!expenses) return 0;
   return expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+};
+
+// 费用类别中英文映射
+const getCategoryLabel = (category) => {
+  const categoryMap = {
+    'transport': '交通',
+    'food': '餐饮', 
+    'tickets': '门票',
+    'shopping': '购物',
+    'lodging': '住宿',
+    'entertainment': '娱乐',
+    'other': '其他'
+  };
+  return categoryMap[category] || category;
 };
 
 // 新增方法：加载对话历史

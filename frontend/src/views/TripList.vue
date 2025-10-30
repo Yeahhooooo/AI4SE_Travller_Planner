@@ -22,7 +22,7 @@
     <el-main class="bg-gray-50 p-8">
       <div class="max-w-7xl mx-auto">
         <el-table :data="trips" stripe class="w-full">
-          <el-table-column prop="title" label="标题"></el-table-column>
+          <el-table-column prop="name" label="标题"></el-table-column>
           <el-table-column prop="start_date" label="开始日期"></el-table-column>
           <el-table-column prop="end_date" label="结束日期"></el-table-column>
           <el-table-column label="操作">

@@ -2,20 +2,23 @@
   <el-container class="h-screen">
     <el-header class="flex items-center justify-between bg-white border-b">
       <div class="flex items-center cursor-pointer" @click="goHome">
-        <el-icon :size="24" class="mr-2 text-blue-500"><MapLocation /></el-icon>
+        <el-icon :size="24" class="mr-2 text-blue-500"><ArrowLeftBold /></el-icon>
         <span class="text-xl font-semibold">AI 旅行规划助手</span>
       </div>
-      <el-dropdown @command="handleCommand">
-        <span class="el-dropdown-link flex items-center">
-          {{ user?.email }}
-          <el-icon class="el-icon--right"><arrow-down /></el-icon>
-        </span>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+      <div class="flex items-center space-x-4">
+
+        <el-dropdown @command="handleCommand">
+          <span class="el-dropdown-link flex items-center">
+            {{ user?.email }}
+            <el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
     </el-header>
 
     <el-main class="bg-gray-50 p-8">
@@ -56,9 +59,10 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification } from 'element-plus';
-import { ArrowDown, MapLocation, Microphone } from '@element-plus/icons-vue';
+import { ArrowDown, MapLocation, Microphone, ArrowLeftBold } from '@element-plus/icons-vue';
 import { XfVoiceDictation } from '@muguilin/xf-voice-dictation';
 import { user, profile } from '../store/userStore';
+
 
 const router = useRouter();
 const prompt = ref('');
@@ -76,18 +80,29 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (xfVoice) {
-    xfVoice.destroy();
+  if (xfVoice && typeof xfVoice.destroy === 'function') {
+    try {
+      xfVoice.destroy();
+    } catch (error) {
+      console.error('Error destroying XF Voice Service:', error);
+    }
   }
 });
 
 const initXfVoice = () => {
   try {
+    // 检查是否有必要的 API 凭证
+    if (!profile.value?.xf_appid || !profile.value?.xf_apisecret || !profile.value?.xf_apikey) {
+      isVoiceServiceReady.value = false;
+      console.warn('讯飞语音 API 凭证未完整设置，语音服务将不可用。');
+      return;
+    }
+
     // 请替换为您的讯飞开放平台凭证
     xfVoice = new XfVoiceDictation({
-      APPID: profile.value?.xf_appid,
-      APISecret: profile.value?.xf_apisecret,
-      APIKey: profile.value?.xf_apikey,
+      APPID: profile.value.xf_appid,
+      APISecret: profile.value.xf_apisecret,
+      APIKey: profile.value.xf_apikey,
 
       // 监听录音状态变化回调
       onWillStatusChange: (oldStatus, newStatus) => {
@@ -118,11 +133,17 @@ const initXfVoice = () => {
     isVoiceServiceReady.value = false;
     ElMessage.error('语音服务初始化失败，请检查浏览器兼容性或刷新页面重试。');
     console.error('Failed to initialize XF Voice Service:', error);
+    // 只有在开发环境或者用户明确尝试使用语音功能时才显示错误消息
+    // ElMessage.error('语音服务初始化失败，请检查浏览器兼容性或刷新页面重试。');
   }
 };
 
 const goHome = () => {
   router.push({ name: 'Dashboard' });
+};
+
+const goBack = () => {
+  router.back();
 };
 
 const handleLogout = async () => {
@@ -138,13 +159,22 @@ const handleCommand = (command) => {
 
 const handleVoiceInput = () => {
     if (!isVoiceServiceReady.value) {
-        ElMessage.error('语音服务尚未就绪，请稍候或刷新页面。');
+        // 检查是否是因为缺少 API 凭证
+        if (!profile.value?.xf_appid || !profile.value?.xf_apisecret || !profile.value?.xf_apikey) {
+            ElMessage.error('语音服务需要配置讯飞 API 凭证，请在个人资料页面设置。');
+        } else {
+            ElMessage.error('语音服务尚未就绪，请稍候或刷新页面。');
+        }
         return;
     }
     if (isRecording.value) {
-        xfVoice.stop();
+        if (xfVoice && typeof xfVoice.stop === 'function') {
+            xfVoice.stop();
+        }
     } else {
-        xfVoice.start();
+        if (xfVoice && typeof xfVoice.start === 'function') {
+            xfVoice.start();
+        }
     }
 };
 
