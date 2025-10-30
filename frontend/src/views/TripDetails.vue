@@ -1,196 +1,300 @@
 <template>
-  <el-container class="h-screen">
-    <el-header class="flex items-center justify-between bg-white border-b px-8">
-      <div class="flex items-center cursor-pointer" @click="goHome">
-        <el-icon :size="24" class="mr-2 text-blue-500"><MapLocation /></el-icon>
-        <span class="text-xl font-semibold">AI 旅行规划助手</span>
-      </div>
-      <div>
-        <el-tooltip content="有新想法？让AI帮你进一步完善行程" placement="bottom">
-          <el-button 
-            type="success"
-            :icon="ChatDotRound" 
-            @click="drawerVisible = true"
-            style="font-weight:bold;font-size:16px;border-radius:22px;padding:0 20px;background:linear-gradient(90deg,#2563eb 60%,#38b2ac 100%);color:#fff;box-shadow:0 2px 8px #2563eb22;"
+  <div class="trip-details-container">
+    <!-- 现代化头部 -->
+    <div class="modern-header">
+      <div class="header-content">
+        <div class="header-left" @click="goHome">
+          <el-icon :size="24" class="header-logo"><MapLocation /></el-icon>
+          <span class="app-title">AI 旅行规划助手</span>
+        </div>
+        
+        <div class="header-actions">
+          <el-tooltip content="有新想法？让AI帮你进一步完善行程" placement="bottom">
+            <button 
+              class="ai-enhance-btn"
+              @click="drawerVisible = true"
+            >
+              <el-icon :size="18"><ChatDotRound /></el-icon>
+              <span>AI智能完善</span>
+            </button>
+          </el-tooltip>
+          
+          <button 
+            v-if="isPreview"
+            class="save-btn primary"
+            @click="saveTrip"
+            :disabled="isSaving"
           >
-            AI智能完善
-          </el-button>
-        </el-tooltip>
-        <el-button 
-          v-if="isPreview"
-          type="primary" 
-          :icon="Finished"
-          @click="saveTrip"
-          :loading="isSaving"
-        >
-          保存到我的计划
-        </el-button>
-        <el-button 
-          v-if="!isPreview && isModified"
-          type="warning" 
-          :icon="Finished"
-          @click="updateTrip"
-          :loading="isSaving"
-        >
-          保存更改
-        </el-button>
-        <el-button :icon="Back" @click="goBack">返回</el-button>
+            <div v-if="isSaving" class="loading-spinner"></div>
+            <el-icon v-else :size="18"><Finished /></el-icon>
+            <span>{{ isSaving ? '保存中...' : '保存到我的计划' }}</span>
+          </button>
+          
+          <button 
+            v-if="!isPreview"
+            class="save-btn"
+            :class="'warning'"
+            @click="updateTrip"
+            :disabled="isSaving"
+          >
+            <div v-if="isSaving" class="loading-spinner"></div>
+            <el-icon v-else :size="18"><Finished /></el-icon>
+            <span>{{ isSaving ? '保存中...' : '保存更改' }}</span>
+          </button>
+          
+          <button class="back-btn" @click="goBack">
+            <el-icon :size="18"><Back /></el-icon>
+            <span>返回</span>
+          </button>
+        </div>
       </div>
-    </el-header>
+    </div>
 
-    <el-container>
-      <el-aside width="500px" class="bg-white p-6 border-r flex flex-col">
-        <el-card shadow="hover" class="mb-4 bg-gradient-to-r from-blue-50 to-teal-50 border-0">
-          <div class="flex items-center gap-2">
-            <el-icon :size="22" class="text-blue-500"><MapLocation /></el-icon>
-            <span class="text-xl font-bold tracking-wide text-blue-700">路线地图</span>
+    <!-- 主要布局容器 -->
+    <div class="main-layout">
+      <!-- 左侧地图区域 -->
+      <div class="map-section">
+        <div class="map-card">
+          <div class="map-header">
+            <el-icon :size="20" class="map-icon"><MapLocation /></el-icon>
+            <span class="map-title">路线地图</span>
           </div>
-        </el-card>
-        <div id="map-container" class="w-full rounded-lg flex-grow bg-gray-200">
-          <div v-if="mapLoadingText" class="flex items-center justify-center h-full">
-            <p class="text-gray-500">{{ mapLoadingText }}</p>
+          <div id="map-container" class="map-container">
+            <div v-if="mapLoadingText" class="map-loading">
+              <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">{{ mapLoadingText }}</p>
+              </div>
+            </div>
           </div>
         </div>
-      </el-aside>
+      </div>
 
-      <el-main class="bg-gray-50 p-8" v-loading="isLoading" element-loading-text="正在加载行程详情...">
-        <div v-if="!isLoading && trip" class="max-w-5xl mx-auto">
+      <!-- 右侧内容区域 -->
+      <div class="content-section" v-loading="isLoading" element-loading-text="正在加载行程详情...">
+        <div v-if="!isLoading && trip" class="trip-content">
           <!-- 行程头部信息 -->
-          <el-card shadow="hover" class="mb-8 bg-gradient-to-r from-teal-50 to-blue-50 border-0">
-            <div class="flex items-center gap-2 mb-2">
-              <el-icon :size="22" class="text-teal-500"><Finished /></el-icon>
-              <span class="text-2xl font-bold tracking-wide text-teal-700">行程安排</span>
+          <div class="trip-header-card">
+            <div class="trip-header-icon">
+              <el-icon :size="24"><Finished /></el-icon>
             </div>
-            <h1 class="text-3xl font-bold text-gray-800 mt-2">{{ trip.name }}</h1>
-            <div class="flex items-center text-gray-500 mt-2">
-              <span>{{ formatDate(trip.start_date) }}</span>
-              <el-icon class="mx-2"><Right /></el-icon>
-              <span>{{ formatDate(trip.end_date) }}</span>
-              <el-divider direction="vertical" />
-              <span>预算: <strong>¥{{ trip.budget }}</strong></span>
+            <div class="trip-header-content">
+              <h1 class="trip-title">{{ trip.name }}</h1>
+              <div class="trip-meta">
+                <div class="trip-dates">
+                  <span>{{ formatDate(trip.start_date) }}</span>
+                  <el-icon class="date-separator"><Right /></el-icon>
+                  <span>{{ formatDate(trip.end_date) }}</span>
+                </div>
+                <div class="trip-budget">
+                  预算: <strong>¥{{ trip.budget }}</strong>
+                </div>
+              </div>
             </div>
-          </el-card>
+          </div>
 
           <!-- 时间线按天分组 -->
-          <div v-for="(day, date) in groupedEvents" :key="date">
-            <h3 class="text-xl font-semibold my-4 pb-2 border-b">{{ formatDate(date, true) }}</h3>
-            <el-timeline>
-              <el-timeline-item 
-                v-for="event in day" 
-                :key="event.tempId" 
-                :timestamp="formatTimestamp(event.start_time)" 
-                placement="top"
-                :type="getEventType(event.type)"
-                :icon="getEventIcon(event.type)"
-              >
-                <el-card>
-                  <h4 class="font-semibold text-lg">{{ event.description }}</h4>
-                  <p class="text-gray-600 mt-1">
-                    <el-icon><Location /></el-icon>
-                    {{ event.location }}
-                  </p>
-                  <!-- 显示预期费用 -->
-                  <div v-if="event.expenses && event.expenses.length > 0" class="mt-2">
-                    <div class="text-sm text-orange-600 mb-1">
-                      <el-tag type="warning" size="small" effect="light">
-                        预期消费: ¥{{ calculateTotalExpense(event.expenses) }}
-                      </el-tag>
+          <div class="timeline-container">
+            <div v-for="(day, date) in groupedEvents" :key="date" class="day-section">
+              <div class="day-header">
+                <div class="day-marker"></div>
+                <h3 class="day-title">{{ formatDate(date, true) }}</h3>
+              </div>
+              
+              <div class="events-timeline">
+                <div 
+                  v-for="event in day" 
+                  :key="event.tempId" 
+                  class="event-item"
+                >
+                  <div class="event-time">
+                    {{ formatTimestamp(event.start_time) }}
+                  </div>
+                  <div class="event-connector">
+                    <div class="event-dot" :class="getEventType(event.type)">
+                      <el-icon :size="16">
+                        <component :is="getEventIcon(event.type)" />
+                      </el-icon>
                     </div>
-                    <!-- 显示费用详细分类 -->
-                    <div class="flex flex-wrap gap-1">
-                      <el-tag 
-                        v-for="(expense, expIndex) in event.expenses" 
-                        :key="expIndex"
-                        size="small" 
-                        effect="plain"
-                        type="info"
-                        :title="expense.description || ''"
-                      >
-                        {{ getCategoryLabel(expense.category) }}: ¥{{ expense.amount }}
-                        <span v-if="expense.description" class="ml-1 text-gray-500">
-                          ({{ expense.description }})
-                        </span>
-                      </el-tag>
+                    <div class="event-line"></div>
+                  </div>
+                  <div class="event-content">
+                    <div class="event-card">
+                      <div class="event-header">
+                        <h4 class="event-title">{{ event.description }}</h4>
+                        <div class="event-actions">
+                          <button class="action-btn edit" @click="openEditDialog(event)">
+                            <el-icon :size="14"><Edit /></el-icon>
+                          </button>
+                          <button class="action-btn delete" @click="handleDeleteEvent(event.tempId)">
+                            <el-icon :size="14"><Delete /></el-icon>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div class="event-location">
+                        <el-icon class="location-icon"><Location /></el-icon>
+                        <span>{{ event.location }}</span>
+                      </div>
+                      
+                      <!-- 显示预期费用 -->
+                      <div v-if="event.expenses && event.expenses.length > 0" class="event-expenses">
+                        <div class="expense-summary">
+                          <span class="expense-label">预期消费:</span>
+                          <span class="expense-amount">¥{{ calculateTotalExpense(event.expenses) }}</span>
+                        </div>
+                        <div class="expense-details">
+                          <div 
+                            v-for="(expense, expIndex) in event.expenses" 
+                            :key="expIndex"
+                            class="expense-tag"
+                            :title="expense.description || ''"
+                          >
+                            <span class="expense-category">{{ getCategoryLabel(expense.category) }}</span>
+                            <span class="expense-value">¥{{ expense.amount }}</span>
+                            <span v-if="expense.description" class="expense-desc">
+                              ({{ expense.description }})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div class="mt-2 flex justify-end space-x-2">
-                    <el-button size="small" :icon="Edit" circle @click="openEditDialog(event)" />
-                    <el-button size="small" :icon="Delete" type="danger" circle @click="handleDeleteEvent(event.tempId)" />
-                  </div>
-                </el-card>
-              </el-timeline-item>
-            </el-timeline>
-            <div class="mt-4 pl-10">
-                <el-button type="primary" plain :icon="Plus" @click="openAddDialog(date)">
-                    在 {{ formatDate(date) }} 添加新事件
-                </el-button>
+                </div>
+              </div>
+              
+              <div class="add-event-section">
+                <button class="add-event-btn" @click="openAddDialog(date)">
+                  <el-icon :size="16"><Plus /></el-icon>
+                  <span>在 {{ formatDate(date) }} 添加新事件</span>
+                </button>
+              </div>
             </div>
           </div>
-
         </div>
-        <el-empty v-if="!isLoading && !trip" description="行程不存在或加载失败"></el-empty>
-      </el-main>
-    </el-container>
+        
+        <div v-if="!isLoading && !trip" class="empty-state">
+          <div class="empty-icon">
+            <el-icon :size="64"><Warning /></el-icon>
+          </div>
+          <h3 class="empty-title">行程不存在或加载失败</h3>
+          <p class="empty-subtitle">请检查链接是否正确或稍后重试</p>
+        </div>
+      </div>
+    </div>
 
     <!-- 事件编辑/添加对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="500px"
+      width="600px"
       @close="resetForm"
+      class="modern-dialog"
     >
-      <el-form :model="currentEvent" ref="eventForm" label-width="80px">
-        <el-form-item label="活动描述" prop="description" :rules="{ required: true, message: '请输入活动描述', trigger: 'blur' }">
-          <el-input v-model="currentEvent.description"></el-input>
-        </el-form-item>
-        <el-form-item label="地点" prop="location" :rules="{ required: true, message: '请输入地点', trigger: 'blur' }">
-          <el-input v-model="currentEvent.location"></el-input>
-        </el-form-item>
-        <el-form-item label="开始时间" prop="start_time" :rules="{ required: true, message: '请选择开始时间', trigger: 'change' }">
-          <el-date-picker
-            v-model="currentEvent.start_time"
-            type="datetime"
-            placeholder="选择日期和时间"
-            format="YYYY-MM-DD HH:mm"
-            value-format="YYYY-MM-DDTHH:mm:ss"
-          ></el-date-picker>
-        </el-form-item>
-        <el-form-item label="事件类型" prop="type">
-          <el-select v-model="currentEvent.type" placeholder="请选择类型">
-            <el-option label="活动" value="activity"></el-option>
-            <el-option label="住宿" value="accommodation"></el-option>
-            <el-option label="交通" value="transport"></el-option>
-            <el-option label="餐饮" value="dining"></el-option>
-          </el-select>
-        </el-form-item>
-
-        <el-divider content-position="left">预期消费</el-divider>
-        
-        <div v-for="(expense, index) in currentEvent.expenses" :key="index" class="mb-3 p-3">
-          <div class="flex items-center space-x-2 mb-2">
-            <el-select v-model="expense.category" placeholder="选择费用类别" class="w-32" style="width: 50%;">
-              <el-option label="交通" value="transport"></el-option>
-              <el-option label="餐饮" value="food"></el-option>
-              <el-option label="门票" value="tickets"></el-option>
-              <el-option label="购物" value="shopping"></el-option>
-              <el-option label="住宿" value="lodging"></el-option>
-              <el-option label="娱乐" value="entertainment"></el-option>
-              <el-option label="其他" value="other"></el-option>
-            </el-select>
-            <el-input-number v-model="expense.amount" :min="0" placeholder="金额" class="w-32"></el-input-number>
-            <el-button :icon="Delete" type="danger" circle plain @click="removeExpense(index)"></el-button>
+      <div class="dialog-content">
+        <el-form :model="currentEvent" ref="eventForm" class="event-form">
+          <!-- 描述和地点使用全宽布局 -->
+          <div class="form-section">
+            <div class="form-item full-width">
+              <label class="form-label">活动描述 *</label>
+              <textarea 
+                v-model="currentEvent.description" 
+                class="modern-textarea"
+                placeholder="请详细描述您的活动内容，如：参观故宫博物院，了解中国古代文化..."
+                rows="1"
+                maxlength="200"
+                required
+              ></textarea>
+              <div class="char-counter">{{ (currentEvent.description || '').length }}/200</div>
+            </div>
+            
+            <div class="form-item full-width">
+              <label class="form-label">地点 *</label>
+              <textarea 
+                v-model="currentEvent.location" 
+                class="modern-textarea"
+                placeholder="请输入详细地址，如：北京市东城区景山前街4号故宫博物院"
+                rows="1"
+                maxlength="100"
+                required
+              ></textarea>
+              <div class="char-counter">{{ (currentEvent.location || '').length }}/100</div>
+            </div>
           </div>
-          <el-input v-model="expense.description" placeholder="费用描述 (如: 地铁票、门票等)" size="small"></el-input>
-        </div>
-        
-        <el-button :icon="Plus" @click="addExpense" class="w-full">添加消费项</el-button>
 
-      </el-form>
+          <!-- 时间和类型使用网格布局 -->
+          <div class="form-grid">
+            <div class="form-item">
+              <label class="form-label">开始时间 *</label>
+              <el-date-picker
+                v-model="currentEvent.start_time"
+                type="datetime"
+                placeholder="选择日期和时间"
+                format="YYYY-MM-DD HH:mm"
+                value-format="YYYY-MM-DDTHH:mm:ss"
+                class="modern-date-picker"
+              />
+            </div>
+            
+            <div class="form-item">
+              <label class="form-label">事件类型</label>
+              <el-select v-model="currentEvent.type" placeholder="请选择类型" class="modern-select">
+                <el-option label="活动" value="activity"></el-option>
+                <el-option label="住宿" value="accommodation"></el-option>
+                <el-option label="交通" value="transport"></el-option>
+                <el-option label="餐饮" value="dining"></el-option>
+              </el-select>
+            </div>
+          </div>
+
+          <div class="expense-section">
+            <div class="section-header">
+              <h4 class="section-title">预期消费</h4>
+            </div>
+            
+            <div class="expense-list">
+              <div v-for="(expense, index) in currentEvent.expenses" :key="index" class="expense-item">
+                <div class="expense-row">
+                  <el-select v-model="expense.category" placeholder="选择费用类别" class="expense-category">
+                    <el-option label="交通" value="transport"></el-option>
+                    <el-option label="餐饮" value="food"></el-option>
+                    <el-option label="门票" value="tickets"></el-option>
+                    <el-option label="购物" value="shopping"></el-option>
+                    <el-option label="住宿" value="lodging"></el-option>
+                    <el-option label="娱乐" value="entertainment"></el-option>
+                    <el-option label="其他" value="other"></el-option>
+                  </el-select>
+                  <el-input-number 
+                    v-model="expense.amount" 
+                    :min="0" 
+                    placeholder="金额" 
+                    class="expense-amount"
+                  />
+                  <button type="button" class="delete-expense-btn" @click="removeExpense(index)">
+                    <el-icon :size="16"><Delete /></el-icon>
+                  </button>
+                </div>
+                <input 
+                  v-model="expense.description" 
+                  placeholder="费用描述 (如: 地铁票、门票等)" 
+                  class="expense-description"
+                />
+              </div>
+            </div>
+            
+            <button type="button" class="add-expense-btn" @click="addExpense">
+              <el-icon :size="16"><Plus /></el-icon>
+              <span>添加消费项</span>
+            </button>
+          </div>
+        </el-form>
+      </div>
+      
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSaveEvent">保存</el-button>
-        </span>
+        <div class="dialog-footer">
+          <button type="button" class="cancel-btn" @click="dialogVisible = false">取消</button>
+          <button type="button" class="confirm-btn" @click="handleSaveEvent">保存</button>
+        </div>
       </template>
     </el-dialog>
 
@@ -203,61 +307,64 @@
       class="ai-drawer"
       @open="loadChatHistory"
     >
-      <div class="flex flex-col h-full bg-gray-50">
-        <div class="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
-          <div class="flex items-center gap-2">
-            <el-icon :size="22" class="text-blue-500"><ChatDotRound /></el-icon>
-            <span class="font-bold text-lg">AI 旅行助手</span>
+      <div class="drawer-content">
+        <div class="drawer-header">
+          <div class="drawer-title">
+            <el-icon :size="22" class="drawer-icon"><ChatDotRound /></el-icon>
+            <span class="title-text">AI 旅行助手</span>
           </div>
-          <el-button type="text" @click="drawerVisible = false" icon="el-icon-close" circle></el-button>
+          <button class="close-drawer-btn" @click="drawerVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </button>
         </div>
-        <div class="chat-list">
-          <template v-if="chatHistory.length">
-            <div v-for="(chat, index) in chatHistory" :key="index" class="flex" :class="chat.role === 'user' ? 'justify-end' : 'justify-start'">
-              <div v-if="chat.role === 'user'" class="max-w-[70%]">
-                <div class="chat-bubble user">
-                  {{ chat.content }}
+        
+        <div class="chat-container">
+          <div class="chat-list">
+            <template v-if="chatHistory.length">
+              <div v-for="(chat, index) in chatHistory" :key="index" class="chat-message" :class="chat.role">
+                <div class="message-bubble">
+                  <div class="message-content" v-html="chat.content"></div>
                 </div>
-                <div class="chat-meta">
-                  我
-                </div>
-              </div>
-              <div v-else class="max-w-[70%]">
-                <div class="chat-bubble ai" v-html="chat.content"></div>
-                <div class="chat-meta ai">
-                  AI助手
+                <div class="message-meta">
+                  {{ chat.role === 'user' ? '我' : 'AI助手' }}
                 </div>
               </div>
+            </template>
+            <div v-else class="empty-chat">
+              <el-icon :size="48" class="empty-icon"><ChatDotRound /></el-icon>
+              <p class="empty-text">暂无对话记录</p>
+              <p class="empty-hint">向AI描述您想要的行程调整</p>
             </div>
-          </template>
-          <el-empty v-else description="暂无对话记录" />
+          </div>
         </div>
-        <div class="input-area">
-          <el-input
-            v-model="newUserPrompt"
-            type="textarea"
-            :rows="2"
-            maxlength="200"
-            show-word-limit
-            resize="none"
-            placeholder="请输入你对当前行程的修改要求..."
-            class="mb-2"
-            @keyup.enter.native="handleAiRefine"
-          />
-          <el-button 
-            type="primary" 
-            @click="handleAiRefine" 
-            :loading="isRefining"
-            class="w-full"
-            size="large"
-            style="font-size: 16px;"
-          >
-            <el-icon><ChatDotRound /></el-icon> 发送
-          </el-button>
+        
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <textarea
+              v-model="newUserPrompt"
+              class="chat-input"
+              rows="3"
+              maxlength="200"
+              placeholder="请输入你对当前行程的修改要求..."
+              @keyup.enter.ctrl="handleAiRefine"
+            ></textarea>
+            <div class="input-actions">
+              <span class="char-count">{{ newUserPrompt.length }}/200</span>
+              <button 
+                class="send-btn"
+                @click="handleAiRefine" 
+                :disabled="isRefining || !newUserPrompt.trim()"
+              >
+                <div v-if="isRefining" class="loading-spinner"></div>
+                <el-icon v-else :size="16"><ChatDotRound /></el-icon>
+                <span>{{ isRefining ? '发送中...' : '发送' }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </el-drawer>
-  </el-container>
+  </div>
 </template>
 
 <script setup>
@@ -267,7 +374,7 @@ import { supabase } from '../supabase';
 import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
 import { user, profile } from '../store/userStore';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning
 } from '@element-plus/icons-vue';
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
@@ -279,7 +386,7 @@ const router = useRouter();
 const trip = ref(null);
 const isLoading = ref(true);
 const isSaving = ref(false);
-const mapLoadingText = ref('正在加载地图...');
+const mapLoadingText = ref(null); // 初始为null，避免阻挡其他元素
 let map = null; // 地图实例
 
 // --- AI 对话抽屉相关 ---
@@ -320,9 +427,13 @@ const groupedEvents = computed(() => {
 });
 
 watch(trip, (newTrip) => {
-  if (originalTripJSON) {
+      console.log('originalTripJSON:', originalTripJSON);
+  console.log('newTripJSON:', JSON.stringify(newTrip));
+  if (!isPreview && originalTripJSON !== '') {
+
     const newTripJSON = JSON.stringify(newTrip);
     isModified.value = newTripJSON !== originalTripJSON;
+    console.log('isModified:', isModified.value);
   }
 }, { deep: true });
 
@@ -392,14 +503,16 @@ const fetchTripDetails = async () => {
     }
 
     trip.value = data;
-    originalTripJSON = JSON.stringify(data); // 存储原始状态
-    isModified.value = false; // 重置修改状态
     // 为从数据库加载的事件添加 tempId，使用数据库的 id
     if (trip.value.events && Array.isArray(trip.value.events)) {
         trip.value.events.forEach(event => {
             event.tempId = event.id;
         });
     }
+    
+    // 在处理完数据结构后再存储原始状态，确保一致性
+    originalTripJSON = JSON.stringify(trip.value);
+    isModified.value = false; // 重置修改状态
     // 使用 nextTick 确保 DOM 已经更新
     nextTick(() => {
       initMap(); // 直接初始化地图
@@ -414,6 +527,8 @@ const fetchTripDetails = async () => {
 };
 
 const initMap = () => {
+  mapLoadingText.value = '正在加载地图...'; // 开始加载时显示
+  
   const events = trip.value?.events || trip.value?.trip_events;
   if (!events || events.length < 2) {
     mapLoadingText.value = '地点不足，无法规划路线';
@@ -715,6 +830,7 @@ const saveTrip = async () => {
       return;
     }
 
+
     // 从 trip.value 构造后端需要的 tripData
     const tripDataToSave = {
         trip_name: trip.value.name,
@@ -723,6 +839,9 @@ const saveTrip = async () => {
         budget: trip.value.budget,
         events: trip.value.events
     };
+
+
+
 
     const response = await fetch('http://localhost:3001/api/trips', {
       method: 'POST',
@@ -853,6 +972,1138 @@ const loadChatHistory = () => {
 </script>
 
 <style scoped>
+/* 基础容器样式 */
+.trip-details-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.trip-details-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 80%, rgba(120, 119, 198, 0.2) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* 现代化头部样式 */
+.modern-header {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 70px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.header-left:hover {
+  transform: translateX(-2px);
+}
+
+.header-logo {
+  color: rgba(255, 255, 255, 0.9);
+  margin-right: 12px;
+  transition: all 0.3s ease;
+}
+
+.header-left:hover .header-logo {
+  color: white;
+  transform: translateX(-2px);
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-enhance-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #2563eb 60%, #38b2ac 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.ai-enhance-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+.save-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.save-btn.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.save-btn.warning {
+  background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(246, 173, 85, 0.3);
+}
+
+.save-btn.secondary {
+  background: linear-gradient(135deg, #718096 0%, #4a5568 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(113, 128, 150, 0.3);
+}
+
+.save-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.back-btn:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 主布局容器 */
+.main-layout {
+  display: flex;
+  height: calc(100vh - 70px);
+  position: relative;
+  z-index: 10;
+}
+
+/* 地图区域样式 */
+.map-section {
+  width: 500px;
+  min-width: 500px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 20px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+}
+
+.map-icon {
+  color: #667eea;
+  margin-right: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+}
+
+.map-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.map-container {
+  flex: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f7fafc;
+  position: relative;
+  pointer-events: auto;
+}
+
+.map-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(247, 250, 252, 0.9);
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-text {
+  margin-top: 12px;
+  color: #718096;
+  font-size: 14px;
+}
+
+/* 内容区域样式 */
+.content-section {
+  flex: 1;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 24px;
+}
+
+.trip-content {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* 行程头部卡片 */
+.trip-header-card {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 32px;
+  margin-bottom: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.trip-header-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(56, 178, 172, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #48bb78;
+  margin-right: 24px;
+}
+
+.trip-header-content {
+  flex: 1;
+}
+
+.trip-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+}
+
+.trip-meta {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 16px;
+  color: #718096;
+}
+
+.trip-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-separator {
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+.trip-budget {
+  font-weight: 600;
+}
+
+/* 时间线容器 */
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.day-section {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+}
+
+.day-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  margin-right: 16px;
+}
+
+.day-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+/* 事件时间线样式 */
+.events-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.event-item {
+  display: grid;
+  grid-template-columns: 80px 40px 1fr;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.event-time {
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  text-align: center;
+  padding: 8px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 8px;
+}
+
+.event-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.event-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  z-index: 2;
+}
+
+.event-dot.primary {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.event-dot.success {
+  background: linear-gradient(135deg, #48bb78, #38b2ac);
+}
+
+.event-dot.warning {
+  background: linear-gradient(135deg, #f6ad55, #ed8936);
+}
+
+.event-dot.info {
+  background: linear-gradient(135deg, #4299e1, #3182ce);
+}
+
+.event-line {
+  position: absolute;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(to bottom, rgba(102, 126, 234, 0.3), transparent);
+}
+
+.event-content {
+  flex: 1;
+}
+
+.event-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  transition: all 0.3s ease;
+}
+
+.event-card:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.event-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+  flex: 1;
+  margin-right: 16px;
+}
+
+.event-actions {
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.event-card:hover .event-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-btn.edit {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.action-btn.edit:hover {
+  background: rgba(102, 126, 234, 0.2);
+  transform: scale(1.1);
+}
+
+.action-btn.delete {
+  background: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
+}
+
+.action-btn.delete:hover {
+  background: rgba(229, 62, 62, 0.2);
+  transform: scale(1.1);
+}
+
+.event-location {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #718096;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.location-icon {
+  font-size: 14px;
+  color: #a0aec0;
+}
+
+/* 费用显示样式 */
+.event-expenses {
+  background: rgba(246, 173, 85, 0.05);
+  border: 1px solid rgba(246, 173, 85, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.expense-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.expense-label {
+  font-size: 14px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.expense-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ed8936;
+}
+
+.expense-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.expense-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(246, 173, 85, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.expense-category {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.expense-value {
+  color: #ed8936;
+  font-weight: 600;
+}
+
+.expense-desc {
+  color: #718096;
+  font-style: italic;
+}
+
+/* 添加事件按钮 */
+.add-event-section {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.add-event-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 2px dashed rgba(102, 126, 234, 0.3);
+  border-radius: 16px;
+  background: rgba(102, 126, 234, 0.05);
+  color: #667eea;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.add-event-btn:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+/* 空状态样式 */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin: 20px auto;
+  max-width: 500px;
+}
+
+.empty-icon {
+  margin-bottom: 24px;
+  color: #f6ad55;
+}
+
+.empty-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.empty-subtitle {
+  font-size: 16px;
+  color: #718096;
+}
+
+/* 对话框样式 */
+.modern-dialog .el-dialog {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+}
+
+.dialog-content {
+  padding: 20px 0;
+}
+
+.event-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-item.full-width {
+  width: 100%;
+}
+
+.form-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.modern-input {
+  padding: 12px 16px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.modern-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modern-textarea {
+  padding: 12px 16px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  font-size: 16px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.modern-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modern-textarea::placeholder {
+  color: #a0aec0;
+  line-height: 1.5;
+}
+
+.char-counter {
+  align-self: flex-end;
+  font-size: 12px;
+  color: #a0aec0;
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+.modern-date-picker,
+.modern-select {
+  border-radius: 12px;
+}
+
+.expense-section {
+  margin-top: 20px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 16px;
+}
+
+.expense-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.expense-item {
+  padding: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.5);
+}
+
+.expense-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.expense-category {
+  flex: 1;
+}
+
+.expense-amount {
+  width: 120px;
+}
+
+.delete-expense-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.delete-expense-btn:hover {
+  background: rgba(229, 62, 62, 0.2);
+  transform: scale(1.1);
+}
+
+.expense-description {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.add-expense-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed rgba(102, 126, 234, 0.3);
+  border-radius: 12px;
+  background: rgba(102, 126, 234, 0.05);
+  color: #667eea;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.add-expense-btn:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 0 0;
+}
+
+.cancel-btn {
+  padding: 10px 20px;
+  border: 2px solid rgba(102, 126, 234, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #667eea;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-btn:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.confirm-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.confirm-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* AI 抽屉样式 */
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f7fafc;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: white;
+}
+
+.drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-icon {
+  color: #667eea;
+}
+
+.title-text {
+  font-weight: 600;
+  font-size: 18px;
+  color: #2d3748;
+}
+
+.close-drawer-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(226, 232, 240, 0.5);
+  color: #718096;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.close-drawer-btn:hover {
+  background: rgba(226, 232, 240, 0.8);
+  color: #2d3748;
+}
+
+.chat-container {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-message.user {
+  align-items: flex-end;
+}
+
+.chat-message.assistant {
+  align-items: flex-start;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.chat-message.user .message-bubble {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.chat-message.assistant .message-bubble {
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d3748;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.message-meta {
+  font-size: 12px;
+  color: #718096;
+  margin-top: 4px;
+  padding: 0 16px;
+}
+
+.empty-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  color: #a0aec0;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #718096;
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: #a0aec0;
+}
+
+.chat-input-area {
+  padding: 16px;
+  border-top: 1px solid #e2e8f0;
+  background: white;
+}
+
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  resize: none;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.char-count {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.send-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .map-section {
+    width: 400px;
+    min-width: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .map-section {
+    width: 100%;
+    min-width: auto;
+    height: 300px;
+  }
+  
+  .header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .ai-enhance-btn,
+  .save-btn,
+  .back-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+  
+  .trip-header-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 24px;
+  }
+  
+  .trip-header-icon {
+    margin-right: 0;
+    margin-bottom: 16px;
+  }
+  
+  .trip-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .event-item {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .event-connector {
+    display: none;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 现有样式保持不变 */
 .ai-drawer .el-drawer__body {
   padding: 0 !important;
   background: #f7fafc;
