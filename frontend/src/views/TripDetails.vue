@@ -86,8 +86,49 @@
                   <el-icon class="date-separator"><Right /></el-icon>
                   <span>{{ formatDate(trip.end_date) }}</span>
                 </div>
-                <div class="trip-budget">
-                  预算: <strong>¥{{ trip.budget }}</strong>
+                <div class="trip-budget-section">
+                  <!-- 预算显示/编辑 -->
+                  <div class="budget-display" v-if="!isEditingBudget">
+                    <div class="budget-item">
+                      <span class="budget-label">预算:</span>
+                      <strong class="budget-amount">¥{{ trip.budget }}</strong>
+                      <button type="button" class="edit-budget-btn" @click="startEditBudget" title="编辑预算">
+                        <el-icon :size="14"><Edit /></el-icon>
+                      </button>
+                    </div>
+                    <div class="expenses-summary">
+                      <span class="expenses-label">已花费:</span>
+                      <strong class="expenses-amount" :class="{ 'over-budget': isOverBudget }">
+                        ¥{{ totalExpenses }}
+                      </strong>
+                    </div>
+                    <div v-if="isOverBudget" class="budget-warning">
+                      <el-icon :size="14" class="warning-icon"><Warning /></el-icon>
+                      <span>超出预算 ¥{{ totalExpenses - Number(trip.budget) }}</span>
+                    </div>
+                  </div>
+                  
+                  <!-- 预算编辑模式 -->
+                  <div class="budget-edit" v-else>
+                    <div class="edit-input-group">
+                      <span class="budget-label">预算:</span>
+                      <el-input-number 
+                        v-model="editBudget" 
+                        :min="0" 
+                        :precision="0"
+                        class="budget-input"
+                        size="small"
+                      />
+                    </div>
+                    <div class="edit-actions">
+                      <button type="button" class="save-budget-btn" @click="saveBudget">
+                        <el-icon :size="12"><Check /></el-icon>
+                      </button>
+                      <button type="button" class="cancel-budget-btn" @click="cancelEditBudget">
+                        <el-icon :size="12"><Close /></el-icon>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -374,7 +415,7 @@ import { supabase } from '../supabase';
 import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
 import { user, profile } from '../store/userStore';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning, Check
 } from '@element-plus/icons-vue';
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
@@ -388,6 +429,10 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const mapLoadingText = ref(null); // 初始为null，避免阻挡其他元素
 let map = null; // 地图实例
+
+// 预算编辑相关
+const isEditingBudget = ref(false);
+const editBudget = ref(0);
 
 // --- AI 对话抽屉相关 ---
 const drawerVisible = ref(false);
@@ -410,6 +455,23 @@ const currentEditingEventId = ref(null); // 显式跟踪正在编辑的事件ID
 const tripId = computed(() => route.params.id);
 const isPreview = computed(() => tripId.value === 'preview');
 
+// 计算所有事件的总花销
+const totalExpenses = computed(() => {
+  if (!trip.value || !trip.value.events) return 0;
+  const events = trip.value.events || trip.value.trip_events || [];
+  return events.reduce((total, event) => {
+    if (event.expenses && Array.isArray(event.expenses)) {
+      const eventTotal = event.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+      return total + eventTotal;
+    }
+    return total;
+  }, 0);
+});
+
+// 检查是否超预算
+const isOverBudget = computed(() => {
+  return trip.value && totalExpenses.value > Number(trip.value.budget || 0);
+});
 
 // 将事件按日期分组
 const groupedEvents = computed(() => {
@@ -960,6 +1022,27 @@ const getCategoryLabel = (category) => {
   return categoryMap[category] || category;
 };
 
+// 预算编辑相关方法
+const startEditBudget = () => {
+  editBudget.value = Number(trip.value.budget || 0);
+  isEditingBudget.value = true;
+};
+
+const cancelEditBudget = () => {
+  isEditingBudget.value = false;
+  editBudget.value = 0;
+};
+
+const saveBudget = () => {
+  if (editBudget.value < 0) {
+    ElMessage.error('预算不能为负数');
+    return;
+  }
+  trip.value.budget = editBudget.value;
+  isEditingBudget.value = false;
+  ElMessage.success('预算已更新');
+};
+
 // 新增方法：加载对话历史
 const loadChatHistory = () => {
   const storedHistory = sessionStorage.getItem('chatHistory');
@@ -1303,6 +1386,148 @@ const loadChatHistory = () => {
 
 .trip-budget {
   font-weight: 600;
+}
+
+/* 预算编辑区域样式 */
+.trip-budget-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-display {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-label {
+  font-size: 16px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.budget-amount {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.edit-budget-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-budget-btn:hover {
+  background: rgba(102, 126, 234, 0.2);
+  transform: scale(1.1);
+}
+
+.expenses-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.expenses-label {
+  color: #718096;
+  font-weight: 500;
+}
+
+.expenses-amount {
+  font-weight: 600;
+  color: #38b2ac;
+  transition: color 0.3s ease;
+}
+
+.expenses-amount.over-budget {
+  color: #e53e3e;
+}
+
+.budget-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e53e3e;
+  background: rgba(229, 62, 62, 0.1);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #e53e3e;
+}
+
+.warning-icon {
+  color: #e53e3e;
+}
+
+.budget-edit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.edit-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-input {
+  width: 120px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.save-budget-btn,
+.cancel-budget-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-budget-btn {
+  background: rgba(72, 187, 120, 0.1);
+  color: #48bb78;
+}
+
+.save-budget-btn:hover {
+  background: rgba(72, 187, 120, 0.2);
+  transform: scale(1.1);
+}
+
+.cancel-budget-btn {
+  background: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
+}
+
+.cancel-budget-btn:hover {
+  background: rgba(229, 62, 62, 0.2);
+  transform: scale(1.1);
 }
 
 /* 时间线容器 */
