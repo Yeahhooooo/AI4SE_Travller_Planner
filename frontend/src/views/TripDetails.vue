@@ -81,10 +81,56 @@
             <div class="trip-header-content">
               <h1 class="trip-title">{{ trip.name }}</h1>
               <div class="trip-meta">
-                <div class="trip-dates">
-                  <span>{{ formatDate(trip.start_date) }}</span>
-                  <el-icon class="date-separator"><Right /></el-icon>
-                  <span>{{ formatDate(trip.end_date) }}</span>
+                <!-- 日期显示/编辑 -->
+                <div class="trip-dates-section">
+                  <div class="dates-display" v-if="!isEditingDates">
+                    <div class="trip-dates">
+                      <span>{{ formatDate(trip.start_date) }}</span>
+                      <el-icon class="date-separator"><Right /></el-icon>
+                      <span>{{ formatDate(trip.end_date) }}</span>
+                      <button type="button" class="edit-dates-btn" @click="startEditDates" title="编辑日期">
+                        <el-icon :size="14"><Edit /></el-icon>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- 日期编辑模式 -->
+                  <div class="dates-edit" v-else>
+                    <div class="edit-dates-group">
+                      <div class="date-input-item">
+                        <span class="date-label">开始:</span>
+                        <el-date-picker
+                          v-model="editStartDate"
+                          type="date"
+                          placeholder="选择开始日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          size="small"
+                          class="date-picker-small"
+                        />
+                      </div>
+                      <div class="date-input-item">
+                        <span class="date-label">结束:</span>
+                        <el-date-picker
+                          v-model="editEndDate"
+                          type="date"
+                          placeholder="选择结束日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          size="small"
+                          class="date-picker-small"
+                        />
+                      </div>
+                    </div>
+                    <div class="edit-dates-actions">
+                      <button type="button" class="save-dates-btn" @click="saveDates">
+                        <el-icon :size="12"><Check /></el-icon>
+                      </button>
+                      <button type="button" class="cancel-dates-btn" @click="cancelEditDates">
+                        <el-icon :size="12"><Close /></el-icon>
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div class="trip-budget-section">
                   <!-- 预算显示/编辑 -->
@@ -434,6 +480,11 @@ let map = null; // 地图实例
 const isEditingBudget = ref(false);
 const editBudget = ref(0);
 
+// 日期编辑相关
+const isEditingDates = ref(false);
+const editStartDate = ref('');
+const editEndDate = ref('');
+
 // --- AI 对话抽屉相关 ---
 const drawerVisible = ref(false);
 const chatHistory = ref([]);
@@ -475,27 +526,44 @@ const isOverBudget = computed(() => {
 
 // 将事件按日期分组
 const groupedEvents = computed(() => {
-  if (!trip.value || !trip.value.events) return {};
+  if (!trip.value) return {};
+  
   // 预览数据和持久化数据的字段名可能不同，做兼容
   const events = trip.value.events || trip.value.trip_events || [];
-  return events.reduce((acc, event) => {
-    const date = event.start_time.split('T')[0]; // 获取 YYYY-MM-DD
-    if (!acc[date]) {
-      acc[date] = [];
+  
+  // 生成行程日期范围内的所有日期
+  const grouped = {};
+  if (trip.value.start_date && trip.value.end_date) {
+    const startDate = new Date(trip.value.start_date);
+    const endDate = new Date(trip.value.end_date);
+    
+    // 创建行程范围内每一天的条目
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]; // 获取 YYYY-MM-DD
+      grouped[dateStr] = [];
     }
-    acc[date].push(event);
-    return acc;
-  }, {});
+  }
+  
+  // 将事件分配到对应日期
+  events.forEach(event => {
+    const date = event.start_time.split('T')[0]; // 获取 YYYY-MM-DD
+    if (grouped[date]) {
+      grouped[date].push(event);
+    }
+  });
+  
+  // 对每个日期内的事件按时间排序
+  Object.keys(grouped).forEach(date => {
+    grouped[date].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+  });
+
+  return grouped;
 });
 
 watch(trip, (newTrip) => {
-      console.log('originalTripJSON:', originalTripJSON);
-  console.log('newTripJSON:', JSON.stringify(newTrip));
   if (!isPreview && originalTripJSON !== '') {
-
     const newTripJSON = JSON.stringify(newTrip);
     isModified.value = newTripJSON !== originalTripJSON;
-    console.log('isModified:', isModified.value);
   }
 }, { deep: true });
 
@@ -528,11 +596,15 @@ const loadPreviewData = () => {
         budget: parsedData.budget,
         events: parsedData.events
     };
-    // 确保预览数据也有 tempId
+    // 确保预览数据也有 tempId 并标准化时间格式
     if (trip.value.events && Array.isArray(trip.value.events)) {
         trip.value.events.forEach((event, index) => {
             if (!event.tempId) {
                 event.tempId = `temp_${Date.now()}_${index}`;
+            }
+            // 标准化时间格式
+            if (event.start_time) {
+                event.start_time = normalizeDateTime(event.start_time);
             }
         });
     }
@@ -666,7 +738,6 @@ const openAddDialog = (date) => {
 };
 
 const openEditDialog = (event) => {
-  console.log('Editing event:', event);
   isEditing.value = true;
   dialogTitle.value = '编辑事件';
   currentEditingEventId.value = event.tempId; // 保存正在编辑的事件的 tempId
@@ -684,7 +755,7 @@ const addExpense = () => {
   if (!currentEvent.value.expenses) {
     currentEvent.value.expenses = [];
   }
-  currentEvent.value.expenses.push({ category: 'other', amount: 0, description: '' });
+  currentEvent.value.expenses.push({ category: 'other', amount: 0, description: '', expense_date: currentEvent.value.start_time });
 };
 
 const removeExpense = (index) => {
@@ -696,6 +767,24 @@ const resetForm = () => {
   if (eventForm.value) {
     eventForm.value.resetFields();
   }
+};
+
+// 时间格式标准化函数
+const normalizeDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return dateTimeStr;
+  
+  // 如果包含时区信息（如 +08:00、+00:00 或 Z），需要转换为统一格式
+  if (dateTimeStr.includes('+') || dateTimeStr.includes('Z')) {
+    return dateTimeStr;
+  }
+  
+  // 如果是标准格式（不带时区），添加 +00:00 时区后缀以保持一致性
+  if (dateTimeStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
+    return `${dateTimeStr}+00:00`;
+  }
+  
+  // 其他格式直接返回
+  return dateTimeStr;
 };
 
 const handleSaveEvent = async () => {
@@ -739,10 +828,12 @@ const handleSaveEvent = async () => {
       lng = coords.lng;
     }
 
+
     const eventToSave = {
       ...currentEvent.value,
       latitude: lat,
       longitude: lng,
+      start_time: normalizeDateTime(currentEvent.value.start_time), // 统一时间格式
     };
 
     const events = trip.value.events || trip.value.trip_events;
@@ -807,11 +898,15 @@ const handleAiRefine = async () => {
     // 更新前端的 trip 数据
     trip.value = refinedTripData;
 
-    // 为AI优化后的新行程事件添加 tempId
+    // 为AI优化后的新行程事件添加 tempId 并标准化时间格式
     if (trip.value.events && Array.isArray(trip.value.events)) {
         trip.value.events.forEach((event, index) => {
             // 如果事件已经有 id（来自数据库），则用它作为 tempId，否则创建新的
             event.tempId = event.id || `temp_${Date.now()}_${index}`;
+            // 标准化时间格式，确保存储一致性
+            if (event.start_time) {
+                event.start_time = normalizeDateTime(event.start_time);
+            }
         });
     }
 
@@ -870,6 +965,7 @@ const handleDeleteEvent = (tempId) => {
 };
 
 const sortAndRefresh = () => {
+    
     const events = trip.value.events || trip.value.trip_events;
     // 按开始时间重新排序所有事件
     events.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
@@ -901,9 +997,6 @@ const saveTrip = async () => {
         budget: trip.value.budget,
         events: trip.value.events
     };
-
-
-
 
     const response = await fetch('http://localhost:3001/api/trips', {
       method: 'POST',
@@ -941,11 +1034,10 @@ const saveTrip = async () => {
   } finally {
     isSaving.value = false;
   }
-
-  console.log('Save trip function executed, current trip plan :', trip.value);
 };
 
 const updateTrip = async () => {
+
   isSaving.value = true;
   try {
     const response = await fetch(`http://localhost:3001/api/trips/${tripId.value}`, {
@@ -991,7 +1083,19 @@ const formatDate = (dateStr, withWeekday = false) => {
   return new Date(dateStr).toLocaleDateString('zh-CN', options);
 };
 
-const formatTimestamp = (ts) => new Date(ts).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+const formatTimestamp = (ts) => {
+  if (!ts) return '';
+  // 直接从ISO字符串中提取时间部分，避免时区转换
+  // 格式通常是: 2024-01-01T14:30:00 或 2024-01-01T14:30:00.000Z
+  const timePart = ts.split('T')[1];
+  if (timePart) {
+    // 提取小时和分钟部分 (HH:mm)
+    const timeOnly = timePart.split(':').slice(0, 2).join(':');
+    return timeOnly;
+  }
+  // 如果格式不匹配，回退到原来的方法
+  return new Date(ts).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+};
 
 const getEventType = (type) => {
   const map = { activity: 'primary', accommodation: 'success', transport: 'info', dining: 'warning' };
@@ -1041,6 +1145,121 @@ const saveBudget = () => {
   trip.value.budget = editBudget.value;
   isEditingBudget.value = false;
   ElMessage.success('预算已更新');
+};
+
+// 日期编辑相关方法
+const startEditDates = () => {
+  editStartDate.value = trip.value.start_date;
+  editEndDate.value = trip.value.end_date;
+  isEditingDates.value = true;
+};
+
+const cancelEditDates = () => {
+  isEditingDates.value = false;
+  editStartDate.value = '';
+  editEndDate.value = '';
+};
+
+const saveDates = () => {
+  if (!editStartDate.value || !editEndDate.value) {
+    ElMessage.error('请选择开始和结束日期');
+    return;
+  }
+  
+  if (new Date(editStartDate.value) > new Date(editEndDate.value)) {
+    ElMessage.error('开始日期不能晚于结束日期');
+    return;
+  }
+  
+  const oldStartDate = trip.value.start_date;
+  const oldEndDate = trip.value.end_date;
+  
+  // 更新行程日期
+  trip.value.start_date = editStartDate.value;
+  trip.value.end_date = editEndDate.value;
+  
+  // 如果日期范围改变了，需要调整事件日期
+  if (oldStartDate !== editStartDate.value || oldEndDate !== editEndDate.value) {
+    adjustEventDates(oldStartDate, oldEndDate, editStartDate.value, editEndDate.value);
+  }
+  
+  isEditingDates.value = false;
+  ElMessage.success('行程日期已更新');
+};
+
+// 调整事件日期以适应新的行程日期范围
+const adjustEventDates = (oldStart, oldEnd, newStart, newEnd) => {
+  if (!trip.value.events || !Array.isArray(trip.value.events)) return;
+  
+  const oldStartDate = new Date(oldStart);
+  const oldEndDate = new Date(oldEnd);
+  const newStartDate = new Date(newStart);
+  const newEndDate = new Date(newEnd);
+  
+  const oldDuration = Math.ceil((oldEndDate - oldStartDate) / (1000 * 60 * 60 * 24)) + 1;
+  const newDuration = Math.ceil((newEndDate - newStartDate) / (1000 * 60 * 60 * 24)) + 1;
+  
+  trip.value.events.forEach(event => {
+    console.log('From old event date:', event.start_time);
+    const eventDateTime = new Date(event.start_time);
+    
+    // 使用UTC时间来避免时区影响，确保日期计算准确
+    const eventDate = new Date(Date.UTC(
+      eventDateTime.getUTCFullYear(), 
+      eventDateTime.getUTCMonth(), 
+      eventDateTime.getUTCDate()
+    ));
+    
+    // 同样使用UTC时间来处理开始日期，确保计算一致性
+    const oldStartUTC = new Date(Date.UTC(
+      oldStartDate.getUTCFullYear(),
+      oldStartDate.getUTCMonth(), 
+      oldStartDate.getUTCDate()
+    ));
+    
+    // 计算事件在原始行程中的相对天数（从0开始）
+    const dayOffset = Math.floor((eventDate - oldStartUTC) / (1000 * 60 * 60 * 24));
+    
+    let newDayOffset;
+    if (newDuration >= oldDuration) {
+      // 如果新行程等于或更长，严格保持事件在原来的天数上
+      // 只有当事件本身就超出了原始范围时才需要调整
+      if (dayOffset < 0) {
+        newDayOffset = 0; // 如果事件在原始开始日期之前，移到第一天
+      } else if (dayOffset >= oldDuration) {
+        newDayOffset = oldDuration - 1; // 如果事件在原始结束日期之后，移到原始最后一天
+      } else {
+        newDayOffset = dayOffset; // 保持原来的相对位置
+      }
+    } else {
+      // 如果新行程更短，按比例压缩到新范围内
+      const ratio = (newDuration - 1) / (oldDuration - 1);
+      newDayOffset = Math.round(dayOffset * ratio);
+    }
+    
+    // 最终确保不超出新的日期范围
+    newDayOffset = Math.max(0, Math.min(newDayOffset, newDuration - 1));
+    
+    // 计算新的事件日期，使用UTC时间确保准确性
+    const newEventDate = new Date(Date.UTC(
+      newStartDate.getUTCFullYear(),
+      newStartDate.getUTCMonth(),
+      newStartDate.getUTCDate() + newDayOffset
+    ));
+    
+    // 保持原有的时间部分，只更新日期部分
+    const timeStr = event.start_time.split('T')[1]; // 获取时间部分
+    const newDateStr = newEventDate.toISOString().split('T')[0]; // 获取新日期部分
+    
+    console.log('Calculated new date string:', newDateStr);
+
+    console.log('to new event date:', event.start_time);
+
+    event.start_time = normalizeDateTime(`${newDateStr}T${timeStr}`);
+
+  });
+  
+  ElMessage.info(`已自动调整 ${trip.value.events.length} 个事件的日期`);
 };
 
 // 新增方法：加载对话历史
@@ -1526,6 +1745,113 @@ const loadChatHistory = () => {
 }
 
 .cancel-budget-btn:hover {
+  background: rgba(229, 62, 62, 0.2);
+  transform: scale(1.1);
+}
+
+/* 日期编辑区域样式 */
+.trip-dates-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dates-display {
+  display: flex;
+  align-items: center;
+}
+
+.trip-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  color: #718096;
+}
+
+.edit-dates-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+}
+
+.edit-dates-btn:hover {
+  background: rgba(102, 126, 234, 0.2);
+  transform: scale(1.1);
+}
+
+.dates-edit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.edit-dates-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.date-input-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-label {
+  font-size: 14px;
+  color: #718096;
+  font-weight: 500;
+  min-width: 40px;
+}
+
+.date-picker-small {
+  width: 140px;
+}
+
+.edit-dates-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.save-dates-btn,
+.cancel-dates-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-dates-btn {
+  background: rgba(72, 187, 120, 0.1);
+  color: #48bb78;
+}
+
+.save-dates-btn:hover {
+  background: rgba(72, 187, 120, 0.2);
+  transform: scale(1.1);
+}
+
+.cancel-dates-btn {
+  background: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
+}
+
+.cancel-dates-btn:hover {
   background: rgba(229, 62, 62, 0.2);
   transform: scale(1.1);
 }
