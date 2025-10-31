@@ -444,6 +444,15 @@
               @keyup.enter.ctrl="handleAiRefine"
             ></textarea>
             <div class="input-actions">
+              <button 
+                :class="['voice-button', { 'recording': isRecording }]"
+                @click="handleVoiceInput"
+                :disabled="!isVoiceServiceReady"
+                :title="isRecording ? '正在录音...' : '语音输入'"
+              >
+                <el-icon :size="16"><Microphone /></el-icon>
+                <div v-if="isRecording" class="recording-indicator"></div>
+              </button>
               <span class="char-count">{{ newUserPrompt.length }}/200</span>
               <button 
                 class="send-btn"
@@ -463,14 +472,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
 import { user, profile } from '../store/userStore';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning, Check, LocationInformation
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning, Check, LocationInformation, Microphone
 } from '@element-plus/icons-vue';
+import { XfVoiceDictation } from '@muguilin/xf-voice-dictation';
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
 import 'element-plus/es/components/notification/style/css'
@@ -500,6 +510,11 @@ const newUserPrompt = ref('');
 const isRefining = ref(false);
 const isModified = ref(false);
 let originalTripJSON = ''; // 用于存储原始行程的JSON字符串
+
+// --- 语音输入相关 ---
+const isRecording = ref(false);
+let xfVoice = null;
+const isVoiceServiceReady = ref(false);
 
 
 // --- 对话框和表单相关 ---
@@ -584,10 +599,24 @@ onMounted(async () => {
     chatHistory.value = JSON.parse(storedHistory);
   }
 
+  // 初始化语音服务
+  initXfVoice();
+
   if (isPreview.value) {
     loadPreviewData();
   } else {
     await fetchTripDetails();
+  }
+});
+
+onUnmounted(() => {
+  // 清理语音服务
+  if (xfVoice && typeof xfVoice.destroy === 'function') {
+    try {
+      xfVoice.destroy();
+    } catch (error) {
+      console.error('Error destroying XF Voice Service:', error);
+    }
   }
 });
 
@@ -1100,6 +1129,10 @@ const normalizeDateTime = (dateTimeStr) => {
   
   // 如果包含时区信息（如 +08:00、+00:00 或 Z），需要转换为统一格式
   if (dateTimeStr.includes('+') || dateTimeStr.includes('Z')) {
+    if(dateTimeStr.endsWith('08:00')) {
+      // 将 +08:00 转换为 +00:00
+      return dateTimeStr.replace('+08:00', '+00:00');
+    }
     return dateTimeStr;
   }
   
@@ -1182,6 +1215,75 @@ const handleSaveEvent = async () => {
     console.error('Error saving event:', error);
     ElMessage.error(error.message || '保存事件时发生网络错误。');
   }
+};
+
+// 初始化讯飞语音服务
+const initXfVoice = () => {
+  try {
+    // 检查是否有必要的 API 凭证
+    if (!profile.value?.xf_appid || !profile.value?.xf_apisecret || !profile.value?.xf_apikey) {
+      isVoiceServiceReady.value = false;
+      console.warn('讯飞语音 API 凭证未完整设置，语音服务将不可用。');
+      return;
+    }
+
+    // 初始化语音识别服务
+    xfVoice = new XfVoiceDictation({
+      APPID: profile.value.xf_appid,
+      APISecret: profile.value.xf_apisecret,
+      APIKey: profile.value.xf_apikey,
+
+      // 监听录音状态变化回调
+      onWillStatusChange: (oldStatus, newStatus) => {
+        if (newStatus === 'ing') {
+          isRecording.value = true;
+        } else if (newStatus === 'end') {
+          isRecording.value = false;
+        }
+      },
+
+      // 监听识别结果的变化回调
+      onTextChange: (text) => {
+        newUserPrompt.value = text;
+      },
+
+      // 监听识别错误回调
+      onError: (error) => {
+        ElMessage.error(`语音识别失败: ${error.message}`);
+        console.error('XF Voice Error:', error);
+        isRecording.value = false;
+      }
+    });
+
+    // 如果代码执行到这里没有抛出异常，说明基础初始化成功
+    isVoiceServiceReady.value = true;
+
+  } catch (error) {
+    isVoiceServiceReady.value = false;
+    console.error('Failed to initialize XF Voice Service:', error);
+  }
+};
+
+// 处理语音输入
+const handleVoiceInput = () => {
+    if (!isVoiceServiceReady.value) {
+        // 检查是否是因为缺少 API 凭证
+        if (!profile.value?.xf_appid || !profile.value?.xf_apisecret || !profile.value?.xf_apikey) {
+            ElMessage.error('语音服务需要配置讯飞 API 凭证，请在个人资料页面设置。');
+        } else {
+            ElMessage.error('语音服务尚未就绪，请稍候或刷新页面。');
+        }
+        return;
+    }
+    if (isRecording.value) {
+        if (xfVoice && typeof xfVoice.stop === 'function') {
+            xfVoice.stop();
+        }
+    } else {
+        if (xfVoice && typeof xfVoice.start === 'function') {
+            xfVoice.start();
+        }
+    }
 };
 
 const handleAiRefine = async () => {
@@ -1317,8 +1419,8 @@ const saveTrip = async () => {
     // 从 trip.value 构造后端需要的 tripData
     const tripDataToSave = {
         trip_name: trip.value.name,
-        start_date: trip.value.start_date,
-        end_date: trip.value.end_date,
+        start_date: normalizeDateTime(trip.value.start_date),
+        end_date: normalizeDateTime(trip.value.end_date),
         budget: trip.value.budget,
         events: trip.value.events
     };
@@ -2919,6 +3021,65 @@ const loadChatHistory = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.voice-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(102, 126, 234, 0.3);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.voice-button:hover:not(:disabled) {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+  transform: translateY(-1px);
+}
+
+.voice-button.recording {
+  border-color: #e53e3e;
+  color: #e53e3e;
+  background: rgba(229, 62, 62, 0.1);
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.voice-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recording-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e53e3e;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0.6; transform: scale(1); }
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(229, 62, 62, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0); }
 }
 
 .char-count {
