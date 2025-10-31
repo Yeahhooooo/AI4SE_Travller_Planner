@@ -26,12 +26,14 @@ ADD COLUMN xf_apisecret TEXT,
 ADD COLUMN xf_apikey TEXT,
 ADD COLUMN llm_apikey TEXT,
 ADD COLUMN map_apikey TEXT;
+ADD COLUMN travel_preferences TEXT;
 
 COMMENT ON COLUMN public.profiles.xf_appid IS '讯飞语音听写服务的 APPID。';
 COMMENT ON COLUMN public.profiles.xf_apisecret IS '讯飞语音听写服务的 APISecret。';
 COMMENT ON COLUMN public.profiles.xf_apikey IS '讯飞语音听写服务的 APIKey。';
 COMMENT ON COLUMN public.profiles.llm_apikey IS '大语言模型服务的 API Key。';
 COMMENT ON COLUMN public.profiles.map_apikey IS '地图服务的 API Key。';
+COMMENT ON COLUMN public.profiles.travel_preferences IS '用户的旅行偏好设置。';
 
 -- 2. trips: 存储用户的旅行计划
 CREATE TABLE public.trips (

@@ -1,0 +1,63 @@
+# 依赖项
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 构建输出
+dist
+.tmp
+.nuxt
+
+# 环境变量文件
+.env.local
+.env.*.local
+
+# 日志文件
+logs
+*.log
+
+# 运行时数据
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# IDE 和编辑器文件
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 操作系统生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git 相关
+.git
+.gitignore
+
+# 文档和说明
+README.md
+*.md
+
+# 测试文件
+coverage/
+.jest/
+__tests__/
+*.test.js
+*.spec.js
+
+# 缓存目录
+.cache
+.parcel-cache
+
+# 其他
+.dockerignore
+Dockerfile
