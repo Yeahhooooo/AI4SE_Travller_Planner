@@ -193,6 +193,7 @@
                   v-for="event in day" 
                   :key="event.tempId" 
                   class="event-item"
+                  @click="focusOnEvent(event)"
                 >
                   <div class="event-time">
                     {{ formatTimestamp(event.start_time) }}
@@ -208,12 +209,19 @@
                   <div class="event-content">
                     <div class="event-card">
                       <div class="event-header">
-                        <h4 class="event-title">{{ event.description }}</h4>
+                        <div class="event-title-wrapper">
+                          <h4 class="event-title">{{ event.description }}</h4>
+                          <el-tooltip content="点击查看地图位置" placement="top" v-if="event.latitude && event.longitude">
+                            <el-icon class="map-focus-icon" :size="16">
+                              <LocationInformation />
+                            </el-icon>
+                          </el-tooltip>
+                        </div>
                         <div class="event-actions">
-                          <button class="action-btn edit" @click="openEditDialog(event)">
+                          <button class="action-btn edit" @click.stop="openEditDialog(event)">
                             <el-icon :size="14"><Edit /></el-icon>
                           </button>
-                          <button class="action-btn delete" @click="handleDeleteEvent(event.tempId)">
+                          <button class="action-btn delete" @click.stop="handleDeleteEvent(event.tempId)">
                             <el-icon :size="14"><Delete /></el-icon>
                           </button>
                         </div>
@@ -461,7 +469,7 @@ import { supabase } from '../supabase';
 import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
 import { user, profile } from '../store/userStore';
 import { 
-  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning, Check
+  MapLocation, Right, Location, Ship, ForkSpoon, ShoppingCart, House, Finished, Back, Edit, Delete, Plus, ChatDotRound, Close, Warning, Check, LocationInformation
 } from '@element-plus/icons-vue';
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
@@ -661,24 +669,29 @@ const fetchTripDetails = async () => {
 };
 
 const initMap = () => {
-  mapLoadingText.value = '正在加载地图...'; // 开始加载时显示
+  mapLoadingText.value = '正在加载地图...'; 
   
   const events = trip.value?.events || trip.value?.trip_events;
-  if (!events || events.length < 2) {
-    mapLoadingText.value = '地点不足，无法规划路线';
+  if (!events || events.length === 0) {
+    mapLoadingText.value = '暂无地点信息';
     return;
   }
 
-  const locationsWithCoords = events
-    .map(event => ({ lat: event.latitude, lng: event.longitude, description: event.description }))
-    .filter(loc => loc.lat && loc.lng);
+  const eventsWithCoords = events
+    .filter(event => event.latitude && event.longitude)
+    .map(event => ({
+      ...event,
+      lat: event.latitude,
+      lng: event.longitude,
+      date: event.start_time.split('T')[0] // 获取日期用于分组
+    }));
 
-  if (locationsWithCoords.length < 2) {
-    mapLoadingText.value = '有效的地理位置不足，无法规划路线';
+  if (eventsWithCoords.length === 0) {
+    mapLoadingText.value = '暂无有效的地理位置信息';
     return;
   }
 
-  mapLoadingText.value = null; // Ready to draw, hide loading text
+  mapLoadingText.value = null;
 
   if (!window.BMapGL) {
     mapLoadingText.value = '百度地图脚本加载失败';
@@ -687,38 +700,350 @@ const initMap = () => {
   }
 
   map = new BMapGL.Map('map-container');
-  const startPoint = new BMapGL.Point(locationsWithCoords[0].lng, locationsWithCoords[0].lat);
-  map.centerAndZoom(startPoint, 12);
-  map.enableScrollWheelZoom(true);
-
-  const endPoint = new BMapGL.Point(locationsWithCoords[locationsWithCoords.length - 1].lng, locationsWithCoords[locationsWithCoords.length - 1].lat);
   
-  let waypoints = locationsWithCoords
-    .slice(1, -1)
-    .map(loc => new BMapGL.Point(loc.lng, loc.lat));
+  // 先设置一个初始中心点，避免显示世界地图
+  const firstEvent = eventsWithCoords[0];
+  const initialPoint = new BMapGL.Point(firstEvent.lng, firstEvent.lat);
+  map.centerAndZoom(initialPoint, 12);
+  
+  // 按日期分组事件
+  const eventsByDate = {};
+  eventsWithCoords.forEach(event => {
+    if (!eventsByDate[event.date]) {
+      eventsByDate[event.date] = [];
+    }
+    eventsByDate[event.date].push(event);
+  });
 
-  // 百度地图API限制：最多支持10个途经点
-  if (waypoints.length > 10) {
-    ElMessage.warning('途经点超过10个，地图上仅显示部分路线。');
-    // waypoints = waypoints.slice(0, 10);
-  }
+  // 为每天的路线定义不同颜色
+  const dayColors = [
+    '#FF6B6B', // 红色
+    '#4ECDC4', // 青色
+    '#45B7D1', // 蓝色
+    '#96CEB4', // 绿色
+    '#FFEAA7', // 黄色
+    '#DDA0DD', // 紫色
+    '#FFA07A', // 橙色
+    '#98D8C8', // 薄荷绿
+    '#F7DC6F', // 金黄色
+    '#BB8FCE'  // 淡紫色
+  ];
 
-  const driving = new BMapGL.DrivingRoute(map, {
-    renderOptions: { 
-      map: map, 
-      autoViewport: true 
-    },
-    onSearchComplete: function(results) {
-      // BMAP_STATUS_SUCCESS 的值为 0
-      if (driving.getStatus() !== 0) {
-        console.error("路线规划失败: ", driving.getStatus());
-        mapLoadingText.value = `路线规划失败 (代码: ${driving.getStatus()})`;
+  const allPoints = [];
+  let colorIndex = 0;
+  let routePlanningPromises = []; // 存储路线规划的Promise
+
+  // 为每一天创建路线和标记
+  Object.keys(eventsByDate).sort().forEach((date, dayIndex) => {
+    const dayEvents = eventsByDate[date];
+    const dayColor = dayColors[colorIndex % dayColors.length];
+    colorIndex++;
+
+    // 对当天事件按时间排序
+    dayEvents.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+
+    // 为每个事件添加标记
+    dayEvents.forEach((event, eventIndex) => {
+      const point = new BMapGL.Point(event.lng, event.lat);
+      allPoints.push(point);
+
+      // 创建自定义图标标记，增加天数标识
+      const icon = new BMapGL.Icon(
+        `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50">
+            <defs>
+              <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.3)"/>
+              </filter>
+            </defs>
+            <!-- 主标记 -->
+            <path d="M20 0C8.954 0 0 8.954 0 20c0 20 20 30 20 30s20-10 20-30C40 8.954 31.046 0 20 0z" 
+                  fill="${dayColor}" filter="url(#shadow)"/>
+            <circle cx="20" cy="20" r="12" fill="white"/>
+            
+            <!-- 天数标识 -->
+            <rect x="3" y="3" width="34" height="12" rx="6" fill="rgba(0,0,0,0.8)"/>
+            <text x="20" y="12" text-anchor="middle" fill="white" font-size="8" font-weight="bold">第${dayIndex + 1}天</text>
+            
+            <!-- 序号 -->
+            <text x="20" y="27" text-anchor="middle" fill="${dayColor}" font-size="12" font-weight="bold">${eventIndex + 1}</text>
+          </svg>
+        `)}`,
+        new BMapGL.Size(40, 50),
+        { anchor: new BMapGL.Size(20, 50) }
+      );
+
+      const marker = new BMapGL.Marker(point, { icon });
+      map.addOverlay(marker);
+
+      // 添加地点名称标签
+
+
+      // 添加信息窗口
+      const infoWindow = new BMapGL.InfoWindow(`
+        <div style="width: 280px; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: ${dayColor}; margin-right: 10px;"></div>
+            <h4 style="margin: 0; color: ${dayColor}; font-size: 16px; font-weight: 600;">
+              第${dayIndex + 1}天 · 第${eventIndex + 1}个地点
+            </h4>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #2c3e50; font-weight: 700;">
+              📍 ${event.description || '未知地点'}
+            </h3>
+            ${event.location ? `<p style="margin: 0 0 8px 0; color: #7f8c8d; font-size: 13px;">📌 ${event.location}</p>` : ''}
+          </div>
+          
+          <div style="background: ${dayColor}15; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+            <p style="margin: 0; color: #34495e; font-size: 14px; font-weight: 500;">
+              🕒 ${new Date(event.start_time).toLocaleString('zh-CN', {
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                weekday: 'short'
+              })}
+            </p>
+          </div>
+          
+          ${event.notes ? `
+            <div style="border-left: 3px solid ${dayColor}; padding-left: 10px; margin-top: 10px;">
+              <p style="margin: 0; color: #555; font-size: 13px; line-height: 1.4;">
+                💭 ${event.notes}
+              </p>
+            </div>
+          ` : ''}
+        </div>
+      `, {
+        width: 320,
+        height: 'auto',
+        maxHeight: 200
+      });
+
+      marker.addEventListener('click', () => {
+        map.openInfoWindow(infoWindow, point);
+      });
+    });
+
+    // 如果当天有多个地点，使用路线规划API获取实际道路路线
+    if (dayEvents.length > 1) {
+      const routePromise = new Promise((resolve) => {
+        const dayPoints = dayEvents.map(event => new BMapGL.Point(event.lng, event.lat));
+        
+        // 创建驾车路线规划实例，不显示默认的路线（我们要自定义样式）
+        const driving = new BMapGL.DrivingRoute(map, {
+          renderOptions: null, // 不使用默认渲染
+          onSearchComplete: function(results) {
+            if (driving.getStatus() === 0) { // 成功
+              const result = results.getPlan(0); // 获取第一个方案
+              if (result) {
+                // 获取路线的所有路径点
+                const routes = [];
+                for (let i = 0; i < result.getNumRoutes(); i++) {
+                  const route = result.getRoute(i);
+                  routes.push(...route.getPath());
+                }
+                
+                if (routes.length > 0) {
+                  // 创建自定义样式的路线
+                  const polyline = new BMapGL.Polyline(routes, {
+                    strokeColor: dayColor,
+                    strokeWeight: 4,
+                    strokeOpacity: 0.8,
+                    strokeStyle: 'solid'
+                  });
+                  
+                  map.addOverlay(polyline);
+
+                  // 添加方向箭头
+                  const arrowSymbol = new BMapGL.Symbol(BMapGL.Symbol_SHAPE_FORWARD_CLOSED_ARROW, {
+                    scale: 0.8,
+                    fillColor: dayColor,
+                    fillOpacity: 0.8,
+                    strokeWeight: 1,
+                    strokeColor: dayColor
+                  });
+
+                  const iconSequence = {
+                    icon: arrowSymbol,
+                    offset: '15%',
+                    repeat: '25%',
+                    fixedRotation: true
+                  };
+
+                  polyline.setOptions({ icons: [iconSequence] });
+                }
+              }
+            } else {
+              // 如果路线规划失败，回退到直线连接
+              console.warn(`第${dayIndex + 1}天的路线规划失败，使用直线连接`);
+              const polyline = new BMapGL.Polyline(dayPoints, {
+                strokeColor: dayColor,
+                strokeWeight: 3,
+                strokeOpacity: 0.6,
+                strokeStyle: 'dashed' // 使用虚线表示直线连接
+              });
+              map.addOverlay(polyline);
+            }
+            resolve();
+          }
+        });
+
+        // 进行路线搜索
+        if (dayPoints.length === 2) {
+          // 两个点之间的直接路线
+          driving.search(dayPoints[0], dayPoints[1]);
+        } else {
+          // 多个点的路线，使用第一个点作为起点，最后一个点作为终点，中间的作为途经点
+          const startPoint = dayPoints[0];
+          const endPoint = dayPoints[dayPoints.length - 1];
+          const waypoints = dayPoints.slice(1, -1);
+          
+          driving.search(startPoint, endPoint, { waypoints: waypoints });
+        }
+      });
+      
+      routePlanningPromises.push(routePromise);
+    }
+  });
+
+  // 等待所有路线规划完成后调整地图视野
+  Promise.all(routePlanningPromises).then(() => {
+    // 自动调整地图视野以显示所有点
+    if (allPoints.length > 0) {
+      if (allPoints.length === 1) {
+        map.centerAndZoom(allPoints[0], 16);
+      } else {
+        // 计算所有点的边界
+        let minLng = allPoints[0].lng, maxLng = allPoints[0].lng;
+        let minLat = allPoints[0].lat, maxLat = allPoints[0].lat;
+        
+        allPoints.forEach(point => {
+          minLng = Math.min(minLng, point.lng);
+          maxLng = Math.max(maxLng, point.lng);
+          minLat = Math.min(minLat, point.lat);
+          maxLat = Math.max(maxLat, point.lat);
+        });
+        
+        const sw = new BMapGL.Point(minLng, minLat);
+        const ne = new BMapGL.Point(maxLng, maxLat);
+        const bounds = new BMapGL.Bounds(sw, ne);
+        
+        // 设置视野，包含所有点并添加合适的边距
+        map.setViewport(bounds, {
+          enableAnimation: true,
+          margins: [60, 60, 60, 60],
+          zoomFactor: -1  // 稍微缩小一点以确保所有点都可见
+        });
       }
     }
   });
 
+  // 添加地图图例
+  const legendControl = new BMapGL.Control();
+  legendControl.defaultAnchor = BMapGL.ANCHOR_TOP_LEFT;
+  legendControl.defaultOffset = new BMapGL.Size(10, 10);
+  
+  legendControl.initialize = function(map) {
+    const legendDiv = document.createElement('div');
+    legendDiv.style.cssText = `
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 13px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+      max-width: 220px;
+      backdrop-filter: blur(10px);
+      border-left: 4px solid #3b82f6;
+    `;
+    
+    let legendHTML = `
+      <div style="font-weight: bold; margin-bottom: 12px; color: #1e293b; font-size: 14px; display: flex; align-items: center;">
+        <span style="margin-right: 8px;">🗺️</span>
+        行程路线图例
+      </div>
+    `;
+    
+    Object.keys(eventsByDate).sort().forEach((date, index) => {
+      const color = dayColors[index % dayColors.length];
+      const dateObj = new Date(date);
+      const formattedDate = dateObj.toLocaleDateString('zh-CN', {
+        month: 'short',
+        day: 'numeric'
+      });
+      const dayName = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dateObj.getDay()];
+      
+      legendHTML += `
+        <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(255,255,255,0.5);">
+          <div style="width: 20px; height: 4px; background: ${color}; margin-right: 10px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
+          <div style="flex: 1;">
+            <div style="font-weight: 600; color: #374151; font-size: 13px;">第${index + 1}天</div>
+            <div style="color: #6b7280; font-size: 11px;">${formattedDate} ${dayName}</div>
+          </div>
+        </div>
+      `;
+    });
+    
+    legendHTML += `
+      <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af;">
+        💡 点击标记查看详情
+      </div>
+    `;
+    
+    legendDiv.innerHTML = legendHTML;
+    return legendDiv;
+  };
+  
+  map.addControl(legendControl);
 
-  // driving.search(startPoint, endPoint, { waypoints: waypoints });
+  map.enableScrollWheelZoom(true);
+};
+
+// 地图对焦到指定事件
+const focusOnEvent = (event) => {
+  if (!map || !event.latitude || !event.longitude) {
+    ElMessage.warning('该事件没有地理位置信息');
+    return;
+  }
+  
+  const point = new BMapGL.Point(event.longitude, event.latitude);
+  
+  // 显示加载提示
+  ElMessage.info('正在定位到地图位置...');
+  
+  // 平滑移动到目标点
+  map.panTo(point);
+  
+  // 设置合适的缩放级别
+  setTimeout(() => {
+    map.setZoom(17);
+  }, 300);
+  
+  // 查找并显示对应标记的信息窗口
+  setTimeout(() => {
+    const overlays = map.getOverlays();
+    let found = false;
+    
+    overlays.forEach(overlay => {
+      if (overlay instanceof BMapGL.Marker) {
+        const position = overlay.getPosition();
+        // 检查坐标是否匹配（允许小的误差）
+        if (Math.abs(position.lng - event.longitude) < 0.0001 && 
+            Math.abs(position.lat - event.latitude) < 0.0001) {
+          // 模拟点击事件显示信息窗口
+          overlay.dispatchEvent(new Event('click'));
+          found = true;
+        }
+      }
+    });
+    
+    if (found) {
+      ElMessage.success('已定位到该地点');
+    }
+  }, 800);
 };
 
 // --- 事件操作 ---
@@ -1907,6 +2232,21 @@ const loadChatHistory = () => {
   grid-template-columns: 80px 40px 1fr;
   gap: 16px;
   align-items: flex-start;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 8px;
+  border-radius: 12px;
+  margin: 4px 0;
+}
+
+.event-item:hover {
+  background: rgba(102, 126, 234, 0.05);
+  transform: translateX(8px);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
+}
+
+.event-item:active {
+  transform: translateX(8px) scale(0.98);
 }
 
 .event-time {
@@ -1996,6 +2336,26 @@ const loadChatHistory = () => {
   margin: 0;
   flex: 1;
   margin-right: 16px;
+}
+
+.event-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.map-focus-icon {
+  color: #667eea;
+  opacity: 0.7;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.map-focus-icon:hover {
+  opacity: 1;
+  transform: scale(1.1);
+  color: #4c63d2;
 }
 
 .event-actions {
