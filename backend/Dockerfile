@@ -1,5 +1,11 @@
 # 使用官方 Node.js 20 的轻量级 Alpine 镜像
-FROM node:20-alpine AS base
+FROM --platform=$BUILDPLATFORM node:20-alpine AS base
+
+# 设置构建参数
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 # 设置工作目录
 WORKDIR /app

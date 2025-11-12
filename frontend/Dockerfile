@@ -1,5 +1,11 @@
 # 多阶段构建 - 构建阶段
-FROM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+
+# 设置构建参数
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 # 设置工作目录
 WORKDIR /app
